@@ -142,6 +142,39 @@ TF 发布规范:
 | 版本 | 日期 | 作者 | 变更说明 |
 |------|------|------|----------|
 | v0.1 | 2026-05-25 | Claude (执行官) | 创建模板 |
+| v0.2 | 2026-05-25 | Claude (执行官) | 添加相机 MXID |
+
+---
+
+## 附录: 硬件配置
+
+### 相机信息
+
+| 属性 | 值 |
+|------|-----|
+| 设备 | OAK-D Pro |
+| MXID | `B4C22057DAC5A53595D92CD44D06F91E` |
+| Key | `12D0C1E7D1AB466C09BD9AE6427D5240` |
+| 连接状态 | ✅ 已连接 |
+| 安装位置 | 前方水平，高度 0.5m |
+
+### 启动命令
+
+```bash
+# 官方启动方式
+ros2 launch factor_perception factor_perception_launch.py key:=12D0C1E7D1AB466C09BD9AE6427D5240
+
+# 如需指定相机位置
+ros2 launch factor_perception factor_perception_launch.py \
+    key:=12D0C1E7D1AB466C09BD9AE6427D5240 \
+    cam_pos_z:=0.5
+```
+
+### 可视化插件安装
+
+```bash
+sudo apt install ros-humble-rtabmap-rviz-plugins ros-humble-octomap-rviz-plugins
+```
 
 ---
 
