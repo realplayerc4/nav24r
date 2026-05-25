@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dpkg -l)",
+      "Bash(sudo apt *)",
+      "Bash(sudo -S apt install -y ros-humble-rmw-cyclonedds-cpp)",
+      "Bash(ros2 pkg *)",
+      "Bash(claude mcp *)",
+      "mcp__mcp-gateway__read_web_page",
+      "WebFetch(domain:mcp.0ki.cn)",
+      "Bash(ros2 launch *)",
+      "Bash(lsusb)",
+      "Read(//dev/**)",
+      "Bash(dmesg)",
+      "Bash(python3 -c \"import depthai as dai; print\\(dai.Device.getAllAvailableDevices\\(\\)\\)\")",
+      "Bash(pip3 show *)",
+      "Bash(ros2 run *)",
+      "Bash(ros2 param *)",
+      "Bash(ros2 topic *)",
+      "Bash(pkill -f \"ros2 launch factor_perception\")",
+      "Bash(ros2 node *)",
+      "Bash(ros2 component *)",
+      "Bash(lsusb -v -d 03e7:)",
+      "Bash(depthai-cli --help)",
+      "Bash(python3 *)",
+      "Bash(pip install *)",
+      "Bash(/opt/ros/humble/lib/factor_perception/factor_perception_node --help)",
+      "Bash(dpkg -L depthai-core)",
+      "Bash(dpkg -L depthai)",
+      "Bash(pkill -9 -f \"factor_perception\")",
+      "Bash(pkill -9 -f \"component_container\")",
+      "WebFetch(domain:gist.github.com)",
+      "Bash(curl -s https://gist.githubusercontent.com/realplayerc4/cbd656de1df36acbc53cf61c157ceb88/raw)"
+    ]
+  }
+}
