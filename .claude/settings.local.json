@@ -30,7 +30,37 @@
       "Bash(pkill -9 -f \"factor_perception\")",
       "Bash(pkill -9 -f \"component_container\")",
       "WebFetch(domain:gist.github.com)",
-      "Bash(curl -s https://gist.githubusercontent.com/realplayerc4/cbd656de1df36acbc53cf61c157ceb88/raw)"
+      "Bash(curl -s https://gist.githubusercontent.com/realplayerc4/cbd656de1df36acbc53cf61c157ceb88/raw)",
+      "Bash(ls -la ~/.cyclonedds.xml 2>/dev/null || echo \"Cyclone DDS config not found\")",
+      "Read(//home/yq/**)",
+      "Bash(ls /opt/ros/humble/share/nav2_bringup/params/ 2>/dev/null)",
+      "Read(//opt/ros/humble/share/nav2_bringup/params/**)",
+      "Bash(git add *)",
+      "Bash(git reset *)",
+      "Bash(git commit -m ' *)",
+      "Bash(cat /opt/ros/humble/share/factor_perception/launch/factor_perception_launch.py | grep -A5 \"PythonExpression\")",
+      "Read(//opt/ros/humble/share/factor_perception/launch/**)",
+      "Bash(timeout 15 cat)",
+      "Bash(ros2 lifecycle *)",
+      "Bash(ros2 service *)",
+      "Bash(pkill -f \"nav2_bringup\")",
+      "Bash(pkill -f \"lifecycle_manager\")",
+      "Bash(pkill -f \"nav2\")",
+      "Bash(pkill -f \"ros2\")",
+      "Bash(pkill -f \"factor_perception\")",
+      "Bash(pkill -9 -f ros2)",
+      "Bash(timeout5 ros2 *)",
+      "Bash(pkill -9 -f \"ros2\\\\|launch\\\\|factor\")",
+      "Bash(tee /tmp/factor_test.log)",
+      "Bash(timeout 10 cat)",
+      "Bash(pkill -9 -f \"ros2\\\\|launch\\\\|factor\" 2>/dev/null; rm -f ~/rtabmap.db; sleep 2; echo \"Database cleared\")",
+      "Bash(pkill -9 -f \"ros2\\\\|launch\\\\|factor\\\\|rtabmap\\\\|component\")",
+      "Bash(pkill -9 -f \"ros2\\\\|launch\\\\|factor\\\\|rtabmap\\\\|component\\\\|robot_state\")",
+      "Bash(sudo usbreset \"Intel Movidius MyriadX\")",
+      "Bash(tee /tmp/fp_launch.log)"
+    ],
+    "additionalDirectories": [
+      "/home/yq"
     ]
   }
 }

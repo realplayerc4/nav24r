@@ -229,15 +229,15 @@ behavior_server:
     use_sim_time: False
     behavior_plugins: ["spin", "backup", "drive_on_heading", "wait"]
     spin:
-      plugin: "nav2_behaviors::Spin"
+      plugin: "nav2_behaviors/Spin"
       spin_dist: 1.57
       time_allowance: 30.0
     backup:
-      plugin: "nav2_behaviors::BackUp"
+      plugin: "nav2_behaviors/BackUp"
       backup_dist: 0.3
       time_allowance: 30.0
     drive_on_heading:
-      plugin: "nav2_behaviors::DriveOnHeading"
+      plugin: "nav2_behaviors/DriveOnHeading"
       dist_to_travel: 0.5
       time_allowance: 30.0
     wait:
