@@ -119,8 +119,8 @@ local_costmap:
       global_frame: odom
       robot_base_frame: base_link
       rolling_window: True
-      width: 3.0
-      height: 3.0
+      width: 3
+      height: 3
       resolution: 0.03
       track_unknown_space: False
       always_send_full_costmap: False
@@ -138,7 +138,7 @@ local_costmap:
         enabled: True
         observation_sources: "pointcloud"
         pointcloud:
-          topic: /factor_perception/depth/points
+          topic: /factor_perception/cloud_obstacles
           data_type: "PointCloud2"
           clearing: True
           marking: True
@@ -174,7 +174,7 @@ global_costmap:
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         enabled: True
-        map_topic: /factor_perception/grid_map
+        map_topic: /factor_perception/map
         first_map_only: False
         subscribe_to_updates: True
         use_maximum: False
@@ -188,7 +188,7 @@ global_costmap:
         enabled: True
         observation_sources: "pointcloud"
         pointcloud:
-          topic: /factor_perception/depth/points
+          topic: /factor_perception/cloud_obstacles
           data_type: "PointCloud2"
           clearing: True
           marking: True
