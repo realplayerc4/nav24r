@@ -57,10 +57,21 @@
       "Bash(pkill -9 -f \"ros2\\\\|launch\\\\|factor\\\\|rtabmap\\\\|component\")",
       "Bash(pkill -9 -f \"ros2\\\\|launch\\\\|factor\\\\|rtabmap\\\\|component\\\\|robot_state\")",
       "Bash(sudo usbreset \"Intel Movidius MyriadX\")",
-      "Bash(tee /tmp/fp_launch.log)"
+      "Bash(tee /tmp/fp_launch.log)",
+      "mcp__mcp-gateway__search_doc",
+      "mcp__mcp-gateway__web_search",
+      "Bash(kill %1 %2)",
+      "Bash(pkill -f \"ros2 launch\")",
+      "Bash(pkill -f \"rtabmap\")",
+      "Bash(journalctl -n 20 --no-pager)",
+      "Bash(kill %1)",
+      "Bash(rviz2 -d /home/yq/nav24r/config/octomap.rviz)",
+      "Bash(cp /opt/ros/humble/share/factor_perception/config/rtabmap.ini /home/yq/nav24r/config/rtabmap_3d.ini)",
+      "Bash(pkill -9 rviz2)"
     ],
     "additionalDirectories": [
-      "/home/yq"
+      "/home/yq",
+      "/opt/ros/humble/share/factor_perception/config"
     ]
   }
 }
