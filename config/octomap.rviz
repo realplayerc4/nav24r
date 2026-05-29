@@ -1,0 +1,39 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Obstacles
+      Topic: /factor_perception/cloud_obstacles
+      Size (m): 0.05
+      Color Transformer: FlatColor
+      Color: 255; 50; 50
+      Alpha: 0.8
+
+    - Class: rviz_default_plugins/Map
+      Name: 2D Map
+      Topic: /factor_perception/map
+      Color Scheme: map
+      Alpha: 0.7
+
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Reference Frame: map
+      Plane Cell Count: 40
+
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Show Arrows: false
+      Show Names: true
+
+  Global Options:
+    Fixed Frame: map
+
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Scale: 100
+      Target Frame: map

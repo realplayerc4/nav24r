@@ -95,6 +95,7 @@ def generate_launch_description():
             'database_path': LaunchConfiguration('database_path'),
             'Mem/IncrementalMemory': 'true',
             'Mem/InitWMWithAllNodes': 'false',
+            'Grid/3D': 'true',
         }],
     )
 
@@ -114,6 +115,7 @@ def generate_launch_description():
             'database_path': LaunchConfiguration('database_path'),
             'Mem/IncrementalMemory': 'false',
             'Mem/InitWMWithAllNodes': 'true',
+            'Grid/3D': 'true',
         }],
     )
 

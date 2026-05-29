@@ -1,0 +1,119 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: 导航模式
+    Property Tree Widget:
+      Expanded:
+        - /障碍物点云1
+        - /2D地图1
+        - /导航路径1
+
+Visualization Manager:
+  Class: ""
+  Displays:
+    # ====== 点云显示 ======
+    - Class: rviz_default_plugins/PointCloud2
+      Name: 障碍物点云
+      Topic: /factor_perception/cloud_obstacles
+      Size (m): 0.05
+      Color Transformer: FlatColor
+      Color: 255; 80; 80
+      Alpha: 0.8
+      Enabled: true
+
+    # ====== 地图显示 ======
+    - Class: rviz_default_plugins/Map
+      Name: 2D地图
+      Topic: /factor_perception/map
+      Color Scheme: map
+      Alpha: 0.7
+      Enabled: true
+
+    # ====== Costmap 显示 ======
+    - Class: rviz_default_plugins/Map
+      Name: Global Costmap
+      Topic: /global_costmap/costmap
+      Color Scheme: costmap
+      Alpha: 0.5
+      Enabled: true
+
+    - Class: rviz_default_plugins/Map
+      Name: Local Costmap
+      Topic: /local_costmap/costmap
+      Color Scheme: costmap
+      Alpha: 0.5
+      Enabled: true
+
+    # ====== 导航路径 ======
+    - Class: rviz_default_plugins/Path
+      Name: 导航路径
+      Topic: /plan
+      Color: 0; 255; 255
+      Alpha: 1.0
+      Enabled: true
+
+    - Class: rviz_default_plugins/Path
+      Name: 全局路径
+      Topic: /factor_perception/global_path
+      Color: 255; 255; 0
+      Alpha: 0.8
+      Enabled: true
+
+    # ====== TF 显示 ======
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Show Arrows: false
+      Show Names: true
+      Show Axes: true
+      Enabled: true
+
+    # ====== 参考网格 ======
+    - Class: rviz_default_plugins/Grid
+      Name: 网格
+      Reference Frame: map
+      Plane Cell Count: 40
+      Color: 160; 160; 160
+      Enabled: true
+
+    # ====== 机器人位置 ======
+    - Class: rviz_default_plugins/Pose
+      Name: 当前位姿
+      Topic: /factor_perception/localization_pose
+      Shape: Arrow
+      Color: 255; 255; 0
+      Enabled: true
+
+    # ====== 目标点 ======
+    - Class: rviz_default_plugins/PoseStamped
+      Name: 导航目标
+      Topic: /goal_pose
+      Color: 255; 0; 255
+      Enabled: true
+
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/SetInitialPose
+      Topic: /factor_perception/initialpose
+    - Class: rviz_default_plugins/SetGoalPose
+      Topic: /goal_pose
+
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Scale: 100
+      Target Frame: base_link
+      X: 0
+      Y: 0
+      Name: 俯视图
+
+Window Geometry:
+  Displays:
+    collapsed: false
+  Width: 1200
+  Height: 800

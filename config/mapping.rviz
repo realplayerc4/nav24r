@@ -1,0 +1,100 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: 建图模式
+    Property Tree Widget:
+      Expanded:
+        - /障碍物点云1
+        - /2D地图1
+        - /TF1
+
+Visualization Manager:
+  Class: ""
+  Displays:
+    # ====== 点云显示 ======
+    - Class: rviz_default_plugins/PointCloud2
+      Name: 障碍物点云
+      Topic: /factor_perception/cloud_obstacles
+      Size (m): 0.05
+      Color Transformer: FlatColor
+      Color: 255; 80; 80
+      Alpha: 0.8
+      Enabled: true
+
+    - Class: rviz_default_plugins/PointCloud2
+      Name: 地面点云
+      Topic: /factor_perception/cloud_ground
+      Size (m): 0.03
+      Color Transformer: FlatColor
+      Color: 80; 200; 80
+      Alpha: 0.6
+      Enabled: true
+
+    - Class: rviz_default_plugins/PointCloud2
+      Name: 全局点云地图
+      Topic: /factor_perception/cloud_map
+      Size (m): 0.02
+      Color Transformer: FlatColor
+      Color: 100; 100; 200
+      Alpha: 0.5
+      Enabled: false
+
+    # ====== 地图显示 ======
+    - Class: rviz_default_plugins/Map
+      Name: 2D地图
+      Topic: /factor_perception/map
+      Color Scheme: map
+      Alpha: 0.7
+      Enabled: true
+
+    # ====== TF 显示 ======
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Show Arrows: true
+      Show Names: true
+      Show Axes: true
+      Enabled: true
+
+    # ====== 参考网格 ======
+    - Class: rviz_default_plugins/Grid
+      Name: 网格
+      Reference Frame: map
+      Plane Cell Count: 40
+      Color: 160; 160; 160
+      Enabled: true
+
+    # ====== 机器人位置 ======
+    - Class: rviz_default_plugins/Pose
+      Name: 当前位姿
+      Topic: /factor_perception/localization_pose
+      Shape: Arrow
+      Color: 255; 255; 0
+      Enabled: true
+
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/SetInitialPose
+      Topic: /factor_perception/initialpose
+    - Class: rviz_default_plugins/SetGoalPose
+      Topic: /factor_perception/goal
+
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Scale: 100
+      Target Frame: map
+      X: 0
+      Y: 0
+      Name: 俯视图
+
+Window Geometry:
+  Displays:
+    collapsed: false
+  Width: 1200
+  Height: 800
