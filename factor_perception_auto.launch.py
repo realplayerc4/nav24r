@@ -124,7 +124,7 @@ def generate_launch_description():
         namespace = '',
         package = 'rclcpp_components',
         executable = 'component_container_mt',
-        ros_arguments = ['--log-level', 'warn'],
+        ros_arguments = ['--log-level', 'info'],  # 改为 info 以查看组件加载信息
         composable_node_descriptions = [factor_perception_node, register_node, rtabmap_slam, rtabmap_localization],
     )
 
