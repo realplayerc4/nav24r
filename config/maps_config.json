@@ -6,7 +6,7 @@
       "created": "2026-06-02 10:47:07",
       "path": "~/rtabmap_maps/map_20260602_1047.db",
       "description": "",
-      "mode": "\u65b0\u5efa"
+      "mode": "新建"
     },
     "map_20260602_1119": {
       "created": "2026-06-02 11:25:29",
@@ -31,7 +31,8 @@
     },
     "map_2026_06_02_03_52": {
       "created": "2026-06-02 11:52:42",
-      "path": "/home/yq/rtabmap_maps/map_2026_06_02_03_52.db"
+      "path": "/home/yq/rtabmap_maps/map_2026_06_02_03_52.db",
+      "mode": "续建"
     }
   }
 }

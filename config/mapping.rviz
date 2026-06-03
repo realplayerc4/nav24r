@@ -164,6 +164,8 @@ Visualization Manager:
           Value: true
         odom:
           Value: true
+        world:
+          Value: true
       Marker Scale: 1
       Name: TF
       Show Arrows: true
@@ -255,7 +257,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 0.00500006228685379
+      Angle: 0.025000035762786865
       Class: rviz_default_plugins/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -265,7 +267,7 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 56.283447265625
+      Scale: 111.09355163574219
       Target Frame: map
       Value: TopDownOrtho (rviz_default_plugins)
       X: 0
