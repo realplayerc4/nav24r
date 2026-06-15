@@ -99,11 +99,12 @@ class FactorControlPanel:
         tk.Button(row2, text="续建", command=self.continue_map, bg='#e07c24', fg='white').pack(side=tk.LEFT, padx=2)
         tk.Button(row2, text="删除", command=self.delete_map, bg='#e63946', fg='white').pack(side=tk.LEFT, padx=2)
 
-        # 新增：查看地图按钮
+        # 新增：查看地图按钮和导出功能
         row_map = tk.Frame(map_frame)
         row_map.pack(fill=tk.X, pady=3)
-        tk.Button(row_map, text="👁️ 查看地图", width=18, height=1, command=self.view_map_only, bg='#9b59b6', fg='white').pack(side=tk.LEFT, padx=5)
-        tk.Button(row_map, text="📊 解读地图质量", width=18, height=1, command=self.analyze_map_quality, bg='#e67e22', fg='white').pack(side=tk.LEFT, padx=5)
+        tk.Button(row_map, text="👁️ 查看地图", width=14, height=1, command=self.view_map_only, bg='#9b59b6', fg='white').pack(side=tk.LEFT, padx=3)
+        tk.Button(row_map, text="📊 解读地图质量", width=14, height=1, command=self.analyze_map_quality, bg='#e67e22', fg='white').pack(side=tk.LEFT, padx=3)
+        tk.Button(row_map, text="🗺️ 导出Octomap", width=14, height=1, command=self.export_octomap, bg='#16a085', fg='white').pack(side=tk.LEFT, padx=3)
 
         self.refresh_maps()
 
@@ -362,6 +363,241 @@ class FactorControlPanel:
         self.root.clipboard_clear()
         self.root.clipboard_append(report_text)
         messagebox.showinfo("成功", "报告已复制到剪贴板")
+
+    def export_octomap(self):
+        """导出 Octomap 地图，带进度显示"""
+        name = self.get_map_name()
+        if not name:
+            messagebox.showerror("错误", "请选择地图")
+            return
+
+        db_path = self.get_db_path(name)
+        if not os.path.exists(db_path):
+            messagebox.showerror("错误", f"地图文件不存在: {db_path}")
+            return
+
+        # 选择分辨率
+        resolution_window = tk.Toplevel(self.root)
+        resolution_window.title("选择 Octomap 分辨率")
+        resolution_window.geometry("300x200")
+
+        tk.Label(resolution_window, text="选择导出分辨率:", font=('Arial', 12, 'bold')).pack(pady=10)
+
+        resolution_var = tk.StringVar(value="0.02")
+        resolutions = [
+            ("0.01m - 超高精度（工业应用）", "0.01"),
+            ("0.02m - 高精度（推荐人形机器人）⭐", "0.02"),
+            ("0.05m - 标准精度（通用导航）", "0.05"),
+            ("0.10m - 低精度（快速规划）", "0.10"),
+        ]
+
+        for text, value in resolutions:
+            rb = tk.Radiobutton(resolution_window, text=text, variable=resolution_var, value=value)
+            rb.pack(anchor=tk.W, padx=20)
+
+        def start_export():
+            resolution = float(resolution_var.get())
+            resolution_window.destroy()
+            self._do_export_octomap(db_path, name, resolution)
+
+        tk.Button(resolution_window, text="开始导出", command=start_export, bg='#16a085', fg='white', width=15).pack(pady=20)
+
+    def _do_export_octomap(self, db_path, name, resolution):
+        """执行 Octomap 导出，显示进度"""
+
+        # 创建进度窗口
+        progress_window = tk.Toplevel(self.root)
+        progress_window.title(f"导出 Octomap - {name}")
+        progress_window.geometry("500x300")
+
+        # 进度信息
+        info_frame = tk.Frame(progress_window)
+        info_frame.pack(fill=tk.X, padx=20, pady=10)
+
+        tk.Label(info_frame, text=f"数据库: {name}", font=('Arial', 10)).pack()
+        tk.Label(info_frame, text=f"分辨率: {resolution}m", font=('Arial', 10)).pack()
+        tk.Label(info_frame, text=f"文件大小: {os.path.getsize(db_path)/(1024*1024):.1f} MB", font=('Arial', 10)).pack()
+
+        # 进度条
+        progress_bar = ttk.Progressbar(progress_window, mode='determinate', length=400)
+        progress_bar.pack(pady=20)
+
+        # 进度文本
+        progress_text = tk.StringVar(value="准备导出...")
+        tk.Label(progress_window, textvariable=progress_text, font=('Arial', 10)).pack()
+
+        # 时间预估
+        time_text = tk.StringVar(value="预估时间: 计算中...")
+        tk.Label(progress_window, textvariable=time_text, font=('Arial', 9), fg='#666666').pack()
+
+        # 详细日志
+        log_frame = tk.Frame(progress_window)
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        log_text = tk.Text(log_frame, height=8, width=50, font=('Consolas', 9))
+        log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scrollbar = tk.Scrollbar(log_frame, command=log_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        log_text.config(yscrollcommand=scrollbar.set)
+
+        # 关闭按钮（初始禁用）
+        close_btn = tk.Button(progress_window, text="关闭", state=tk.DISABLED, command=progress_window.destroy, width=15)
+        close_btn.pack(pady=10)
+
+        # 输出文件
+        output_dir = os.path.dirname(db_path)
+        basename = os.path.basename(db_path).replace('.db', '')
+        output_file = os.path.join(output_dir, f"{basename}_octomap_{resolution}m.bt")
+
+        def log_message(msg):
+            log_text.insert(tk.END, msg + "\n")
+            log_text.see(tk.END)
+            logger.info(msg)
+
+        def update_progress(value, text):
+            progress_bar['value'] = value
+            progress_text.set(text)
+            progress_window.update()
+
+        def export_thread():
+            try:
+                log_message("=" * 50)
+                log_message(f"开始导出 Octomap")
+                log_message(f"数据库: {db_path}")
+                log_message(f"分辨率: {resolution}m")
+                log_message(f"输出: {output_file}")
+                log_message("=" * 50)
+                log_message("")
+
+                update_progress(5, "步骤 1: 分析数据库...")
+                log_message("步骤 1: 分析数据库结构")
+
+                # 估算时间（基于文件大小和分辨率）
+                db_size_mb = os.path.getsize(db_path) / (1024*1024)
+                base_time = 20  # 基础加载时间
+                processing_time = db_size_mb * 0.5  # 每MB约0.5秒处理
+                resolution_factor = 1 / resolution  # 分辨率越高时间越长
+                estimated_time = int(base_time + processing_time * resolution_factor)
+
+                time_text.set(f"预估时间: {estimated_time}秒 (约 {estimated_time//60}分{estimated_time%60}秒)")
+                log_message(f"预估导出时间: {estimated_time}秒")
+
+                update_progress(10, "步骤 2: 加载地图数据...")
+                log_message("步骤 2: 启动 RTAB-Map 定位模式加载地图")
+
+                # 启动 RTAB-Map 定位模式
+                ros_setup = self.app_config['ros']['setup_path']
+                camera_key = self.app_config['camera']['key']
+
+                cmd = f"bash -c 'source {ros_setup} && export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp && export CYCLONEDDS_URI=file:///home/yq/nav24r/config/cyclonedds.xml && ros2 launch factor_perception factor_perception_launch.py localization:=true database_path:={db_path} key:={camera_key}'"
+
+                log_message(f"执行命令: ros2 launch factor_perception...")
+                subprocess.Popen(cmd, shell=True)
+
+                update_progress(20, "步骤 3: 等待地图加载...")
+                log_message("步骤 3: 等待 RTAB-Map 加载地图数据")
+
+                # 等待地图加载（动态进度）
+                import time
+                load_time = min(estimated_time * 0.6, 30)  # 最多等待30秒
+                wait_steps = int(load_time)
+                for i in range(wait_steps):
+                    time.sleep(1)
+                    progress = 20 + (i / wait_steps) * 30
+                    update_progress(progress, f"步骤 3: 等待地图加载 ({i+1}/{wait_steps}秒)")
+
+                log_message(f"地图加载完成 (等待 {wait_steps}秒)")
+
+                update_progress(50, "步骤 4: 检查 Octomap 数据...")
+                log_message("步骤 4: 检查 Octomap 话题是否发布")
+
+                # 检查 Octomap 话题
+                check_cmd = f"bash -c 'source {ros_setup} && timeout 5 ros2 topic list | grep octomap_binary'"
+                result = subprocess.run(check_cmd, shell=True, capture_output=True, text=True)
+
+                if 'octomap_binary' in result.stdout:
+                    log_message("✓ Octomap 话题已发布")
+                    update_progress(60, "步骤 5: 捕获 Octomap 数据...")
+                    log_message("步骤 5: 从话题捕获 Octomap 数据")
+
+                    # 使用 Python 脚本保存
+                    save_script = "/home/yq/nav24r/scripts/save_octomap_from_topic.py"
+                    if os.path.exists(save_script):
+                        log_message(f"运行保存脚本: {save_script}")
+                        save_cmd = f"bash -c 'source {ros_setup} && timeout 10 python3 {save_script} {output_file}'"
+                        save_result = subprocess.run(save_cmd, shell=True, capture_output=True, text=True)
+
+                        update_progress(80, "步骤 6: 保存 Octomap 文件...")
+                        log_message(save_result.stdout)
+                        if save_result.stderr:
+                            log_message(f"错误: {save_result.stderr}")
+                    else:
+                        # 备用方法：直接录制话题
+                        log_message("使用备用方法：录制话题数据")
+                        echo_cmd = f"bash -c 'source {ros_setup} && timeout 10 ros2 topic echo /factor_perception/octomap_binary --once'"
+
+                        update_progress(70, "正在捕获数据...")
+                        log_message("捕获 Octomap 二进制数据...")
+
+                        # 这个方法需要手动解析，建议使用 Database Viewer
+                        log_message("")
+                        log_message("⚠️ 自动导出需要额外的 ROS 工具")
+                        log_message("推荐使用 GUI 方法导出：")
+                        log_message("  rtabmap-databaseViewer " + db_path)
+                        log_message("  File → Export 3D clouds → Octomap")
+
+                else:
+                    log_message("⚠️ Octomap 话题未发布")
+                    log_message("地图可能还未完全加载")
+
+                # 清理进程
+                update_progress(90, "步骤 7: 清理进程...")
+                log_message("步骤 7: 停止 RTAB-Map 进程")
+                subprocess.run("pkill -f 'ros2 launch'", shell=True)
+
+                # 检查输出文件
+                update_progress(95, "验证导出结果...")
+                log_message("")
+                log_message("=" * 50)
+
+                if os.path.exists(output_file):
+                    size = os.path.getsize(output_file) / 1024
+                    log_message("✅ 导出成功!")
+                    log_message(f"输出文件: {output_file}")
+                    log_message(f"文件大小: {size:.2f} KB")
+                    log_message("")
+                    log_message("后续操作:")
+                    log_message(f"  查看: octomap-viewer {output_file}")
+                    log_message(f"  信息: octomap-info {output_file}")
+                    update_progress(100, "✅ 导出完成!")
+                else:
+                    log_message("⚠️ 自动导出未成功")
+                    log_message("")
+                    log_message("推荐使用 GUI 导出方法:")
+                    log_message(f"  rtabmap-databaseViewer {db_path}")
+                    log_message("  File → Export 3D clouds")
+                    log_message("  选择 Octomap, 分辨率 {resolution}m")
+                    log_message("")
+                    log_message("这是最可靠的导出方法！")
+                    update_progress(100, "请使用 GUI 方法导出")
+
+                log_message("=" * 50)
+
+                # 启用关闭按钮
+                close_btn.config(state=tk.NORMAL)
+                self.status_var.set(f"状态: Octomap 导出完成 - {name}")
+
+            except Exception as e:
+                log_message(f"❌ 导出失败: {str(e)}")
+                update_progress(0, f"导出失败: {str(e)}")
+                close_btn.config(state=tk.NORMAL)
+                logger.error(f"Octomap 导出失败: {e}")
+
+        # 启动导出线程
+        import threading
+        thread = threading.Thread(target=export_thread, daemon=True)
+        thread.start()
 
     def view_database(self):
         name = self.get_map_name()
