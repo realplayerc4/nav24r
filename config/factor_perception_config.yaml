@@ -1,0 +1,32 @@
+# Factor Perception 配置文件
+# 用于管理敏感信息和常用配置
+
+# 相机配置
+camera:
+  key: "12D0C1E7D1AB466C09BD9AE6427D5240"  # OAK-D 相机密钥
+  mxid: ""  # 自动检测或手动指定
+  model: "OAK-D-PRO-W"
+
+# ROS 配置
+ros:
+  distro: "jazzy"
+  setup_path: "/opt/ros/jazzy/setup.bash"
+
+# 地图配置
+maps:
+  directory: "~/rtabmap_maps"
+  default_db: "~/rtabmap.db"
+
+# 启动参数
+launch:
+  depth_filter: true
+  ir_intensity: 0.4
+  cam_pos_z: 0.5
+  publish_tf: true
+
+# 路径配置
+paths:
+  project_root: "/home/yq/nav24r"
+  config_dir: "/home/yq/nav24r/config"
+  scripts_dir: "/home/yq/nav24r/scripts"
+  docs_dir: "/home/yq/nav24r/docs"

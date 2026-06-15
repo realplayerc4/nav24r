@@ -1,0 +1,211 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 70
+    Name: Octomap 3D 专用
+    Property Tree Widget:
+      Expanded:
+        - /障碍物 Octomap1
+        - /地面 Octomap1
+        - /Octomap 切片1
+        - /网格1
+      Splitter Ratio: 0.5
+    Tree Height: 574
+Visualization Manager:
+  Class: ""
+  Displays:
+    # 障碍物 Octomap - 按高度着色
+    - Alpha: 0.8
+      Autocompute Intensity Bounds: false
+      Class: rviz_default_plugins/PointCloud2
+      Color Transformer: AxisColor
+      Axis: Z
+      Max Intensity: 2.0
+      Min Intensity: 0.0
+      Decay Time: 0
+      Enabled: true
+      Name: 障碍物 Octomap
+      Size (Pixels): 5
+      Size (m): 0.1
+      Style: Boxes
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /factor_perception/cloud_obstacles
+      Use Fixed Frame: true
+      Value: true
+
+    # 地面 Octomap - 绿色半透明
+    - Alpha: 0.4
+      Autocompute Intensity Bounds: true
+      Class: rviz_default_plugins/PointCloud2
+      Color: 80; 200; 80
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Name: 地面 Octomap
+      Size (Pixels): 4
+      Size (m): 0.08
+      Style: Boxes
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /factor_perception/cloud_ground
+      Use Fixed Frame: true
+      Value: true
+
+    # Octomap 切片视图（可选）
+    - Alpha: 0.6
+      Class: rviz_default_plugins/Map
+      Color Scheme: map
+      Draw Behind: false
+      Enabled: false
+      Name: Octomap 切片
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /factor_perception/grid_prob_map
+      Use Timestamp: false
+      Value: false
+
+    # 网格
+    - Alpha: 0.3
+      Cell Size: 0.5
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 160
+      Enabled: true
+      Line Style:
+        Line Width: 0.02
+        Value: Lines
+      Name: 网格
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 60
+      Reference Frame: map
+      Value: true
+
+    # TF（简化）
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: false
+        base_link:
+          Value: true
+        map:
+          Value: true
+      Marker Scale: 0.3
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false  # 不显示名称，避免遮挡
+      Update Interval: 0
+      Value: true
+
+    # 机器人位姿
+    - Alpha: 1
+      Axes Length: 0.3
+      Axes Radius: 0.03
+      Class: rviz_default_plugins/Pose
+      Color: 255; 255; 0
+      Enabled: true
+      Head Length: 0.1
+      Head Radius: 0.03
+      Name: 机器人位姿
+      Shaft Length: 0.3
+      Shaft Radius: 0.02
+      Shape: Arrow
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /factor_perception/localization_pose
+      Value: true
+
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/SetInitialPose
+      Topic: /factor_perception/initialpose
+    - Class: rviz_default_plugins/SetGoalPose
+      Topic: /factor_perception/goal
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      # 3D 轨道视角，距离适中
+      Class: rviz_default_plugins/Orbit
+      Distance: 6.0
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 1.0
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: 0.6
+      Target Frame: base_link
+      Yaw: 0.5
+    Saved:
+      # 多种视角预设
+      - Class: rviz_default_plugins/Orbit
+        Name: 标准 3D
+        Distance: 8.0
+        Focal Point:
+          X: 0
+          Y: 0
+          Z: 1
+        Pitch: 0.7
+        Yaw: 0.3
+      - Class: rviz_default_plugins/TopDownOrtho
+        Name: 顶视角
+        Scale: 80
+        Target Frame: map
+        Angle: 0
+      - Class: rviz_default_plugins/Orbit
+        Name: 近景观察
+        Distance: 3.0
+        Focal Point:
+          X: 0
+          Y: 0
+          Z: 1.5
+        Pitch: 0.2
+        Yaw: 0.0
+      - Class: rviz_default_plugins/Orbit
+        Name: 远景全景
+        Distance: 15.0
+        Focal Point:
+          X: 0
+          Y: 0
+          Z: 0
+        Pitch: 1.0
+        Yaw: 0.0
+Window Geometry:
+  Height: 800
+  Width: 1200
+  X: 200
+  Y: 100
+  Octomap 3D 专用:
+    collapsed: false

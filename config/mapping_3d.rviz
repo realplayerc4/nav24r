@@ -1,0 +1,304 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 70
+    Name: 3D 建图模式
+    Property Tree Widget:
+      Expanded:
+        - /障碍物点云1
+        - /地面点云1
+        - /Octomap 3D1
+        - /2D地图1
+        - /TF1
+      Splitter Ratio: 0.5
+    Tree Height: 574
+Visualization Manager:
+  Class: ""
+  Displays:
+    # 障碍物点云 - 红色
+    - Alpha: 0.8
+      Autocompute Intensity Bounds: true
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 80; 80
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Name: 障碍物点云
+      Size (Pixels): 3
+      Size (m): 0.05
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /factor_perception/cloud_obstacles
+      Use Fixed Frame: true
+      Value: true
+
+    # 地面点云 - 绿色
+    - Alpha: 0.6
+      Autocompute Intensity Bounds: true
+      Class: rviz_default_plugins/PointCloud2
+      Color: 80; 200; 80
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Name: 地面点云
+      Size (Pixels): 3
+      Size (m): 0.03
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /factor_perception/cloud_ground
+      Use Fixed Frame: true
+      Value: true
+
+    # 全局点云地图 - 蓝色（可选）
+    - Alpha: 0.5
+      Autocompute Intensity Bounds: true
+      Class: rviz_default_plugins/PointCloud2
+      Color: 100; 100; 200
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: false
+      Name: 全局点云地图
+      Size (Pixels): 2
+      Size (m): 0.02
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /factor_perception/cloud_map
+      Use Fixed Frame: true
+      Value: false
+
+    # 2D 占用地图
+    - Alpha: 0.7
+      Class: rviz_default_plugins/Map
+      Color Scheme: map
+      Draw Behind: false
+      Enabled: true
+      Name: 2D地图
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /factor_perception/map
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /factor_perception/map_updates
+      Use Timestamp: false
+      Value: true
+
+    # Octomap 3D 显示 - 核心新增
+    - Alpha: 0.7
+      Class: rviz_default_plugins/PointCloud2  # 使用点云形式显示 Octomap
+      Color: 200; 200; 200
+      Color Transformer: AxisColor  # 按高度着色
+      Axis: Z
+      Max Intensity: 2.0
+      Min Intensity: 0.0
+      Decay Time: 0
+      Enabled: true
+      Name: Octomap 3D
+      Size (Pixels): 4
+      Size (m): 0.08
+      Style: Boxes  # 使用方块样式
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /factor_perception/cloud_obstacles  # 使用障碍物点云作为 Octomap 显示
+      Use Fixed Frame: true
+      Value: true
+
+    # TF 坐标系显示
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: false  # 不显示所有坐标系，避免混乱
+        base_link:
+          Value: true
+        map:
+          Value: true
+        odom:
+          Value: true
+        oak_base_frame:
+          Value: true
+      Marker Scale: 0.5
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Update Interval: 0
+      Value: true
+
+    # 网格
+    - Alpha: 0.3
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 160
+      Enabled: true
+      Line Style:
+        Line Width: 0.02
+        Value: Lines
+      Name: 网格
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 40
+      Reference Frame: map
+      Value: true
+
+    # 当前位姿
+    - Alpha: 1
+      Axes Length: 0.5
+      Axes Radius: 0.05
+      Class: rviz_default_plugins/Pose
+      Color: 255; 255; 0
+      Enabled: true
+      Head Length: 0.15
+      Head Radius: 0.05
+      Name: 当前位姿
+      Shaft Length: 0.5
+      Shaft Radius: 0.03
+      Shape: Arrow
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /factor_perception/localization_pose
+      Value: true
+
+    # 机器人模型（如果有）
+    - Alpha: 1
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+      Enabled: false
+      Name: 机器人模型
+      Visual Enabled: true
+      Value: false
+
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/SetInitialPose
+      Covariance x: 0.25
+      Covariance y: 0.25
+      Covariance yaw: 0.06853891909122467
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /factor_perception/initialpose
+    - Class: rviz_default_plugins/SetGoalPose
+      Topic: /factor_perception/goal
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      # 使用 Orbit 3D 轨道视角（核心改进）
+      Class: rviz_default_plugins/Orbit
+      Distance: 8.0
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 1.0
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: 0.8  # 俯仰角（0 = 水平，pi/2 = 顶视）
+      Target Frame: base_link  # 可以跟随机器人
+      Value: Orbit (rviz_default_plugins)
+      Yaw: 0.0  # 偏航角
+    Saved:
+      # 保存的视角预设
+      - Class: rviz_default_plugins/TopDownOrtho
+        Name: 顶视角（正交）
+        Scale: 100
+        Target Frame: map
+        X: 0
+        Y: 0
+        Angle: 0
+      - Class: rviz_default_plugins/Orbit
+        Name: 3D 侧面视角
+        Distance: 10.0
+        Focal Point:
+          X: 0
+          Y: 0
+          Z: 1.0
+        Pitch: 0.5
+        Yaw: 0.8
+      - Class: rviz_default_plugins/Orbit
+        Name: 前视角
+        Distance: 6.0
+        Focal Point:
+          X: 0
+          Y: 0
+          Z: 1.5
+        Pitch: 0.3
+        Yaw: 0.0
+      - Class: rviz_default_plugins/Orbit
+        Name: 高处俯视
+        Distance: 12.0
+        Focal Point:
+          X: 0
+          Y: 0
+          Z: 0
+        Pitch: 1.2
+        Yaw: 0.0
+Window Geometry:
+  Height: 900
+  Hide Left Dock: false
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd00000001000000000000023d000002c6fc0200000001fb0000000a00560069006500770073010000003d000002c6000000ce00ffffff0000026d000002c600000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Width: 1400
+  X: 100
+  Y: 50
+  3D 建图模式:
+    collapsed: false
