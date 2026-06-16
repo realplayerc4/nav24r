@@ -403,7 +403,7 @@ class FactorControlPanel:
         tk.Button(resolution_window, text="开始导出", command=start_export, bg='#16a085', fg='white', width=15).pack(pady=20)
 
     def _do_export_octomap(self, db_path, name, resolution):
-        """执行 Octomap 导出，显示进度"""
+        """执行 Octomap 导出 - 直接从数据库导出（快速方法）"""
 
         # 创建进度窗口
         progress_window = tk.Toplevel(self.root)
@@ -427,7 +427,7 @@ class FactorControlPanel:
         tk.Label(progress_window, textvariable=progress_text, font=('Arial', 10)).pack()
 
         # 时间预估
-        time_text = tk.StringVar(value="预估时间: 计算中...")
+        time_text = tk.StringVar(value="预估时间: 5-10秒")
         tk.Label(progress_window, textvariable=time_text, font=('Arial', 9), fg='#666666').pack()
 
         # 详细日志
@@ -463,133 +463,115 @@ class FactorControlPanel:
         def export_thread():
             try:
                 log_message("=" * 50)
-                log_message(f"开始导出 Octomap")
+                log_message("直接从数据库导出 Octomap（快速方法）")
+                log_message("=" * 50)
                 log_message(f"数据库: {db_path}")
                 log_message(f"分辨率: {resolution}m")
                 log_message(f"输出: {output_file}")
-                log_message("=" * 50)
+                log_message("")
+                log_message("✅ 使用 rtabmap-export 工具")
+                log_message("   无需启动 Factor Perception")
+                log_message("   无需等待地图加载")
                 log_message("")
 
-                update_progress(5, "步骤 1: 分析数据库...")
-                log_message("步骤 1: 分析数据库结构")
+                update_progress(10, "检查导出工具...")
+                log_message("步骤 1: 检查 rtabmap-export 可用性")
 
-                # 估算时间（基于文件大小和分辨率）
-                db_size_mb = os.path.getsize(db_path) / (1024*1024)
-                base_time = 20  # 基础加载时间
-                processing_time = db_size_mb * 0.5  # 每MB约0.5秒处理
-                resolution_factor = 1 / resolution  # 分辨率越高时间越长
-                estimated_time = int(base_time + processing_time * resolution_factor)
+                # 检查工具
+                check_cmd = "which rtabmap-export"
+                check_result = subprocess.run(check_cmd, shell=True, capture_output=True, text=True)
 
-                time_text.set(f"预估时间: {estimated_time}秒 (约 {estimated_time//60}分{estimated_time%60}秒)")
-                log_message(f"预估导出时间: {estimated_time}秒")
+                if check_result.returncode == 0:
+                    log_message(f"✓ 工具路径: {check_result.stdout.strip()}")
+                    update_progress(20, "准备导出参数...")
 
-                update_progress(10, "步骤 2: 加载地图数据...")
-                log_message("步骤 2: 启动 RTAB-Map 定位模式加载地图")
+                    log_message("")
+                    log_message("步骤 2: 构建导出命令")
 
-                # 启动 RTAB-Map 定位模式
-                ros_setup = self.app_config['ros']['setup_path']
-                camera_key = self.app_config['camera']['key']
+                    # 使用 rtabmap-export 导出 Octomap
+                    # 注意：rtabmap-export 不直接支持 octomap 格式
+                    # 我们需要导出点云，然后转换为 Octomap
+                    # 或者使用 Database Viewer GUI 方法
 
-                cmd = f"bash -c 'source {ros_setup} && export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp && export CYCLONEDDS_URI=file:///home/yq/nav24r/config/cyclonedds.xml && ros2 launch factor_perception factor_perception_launch.py localization:=true database_path:={db_path} key:={camera_key}'"
+                    log_message("⚠️  rtabmap-export 不直接支持 Octomap 格式")
+                    log_message("")
+                    log_message("推荐方法:")
+                    log_message("  方法 1: Database Viewer GUI (最可靠)")
+                    log_message(f"    rtabmap-databaseViewer {db_path}")
+                    log_message("    File → Export 3D clouds → Octomap")
+                    log_message("")
+                    log_message("  方法 2: 启动定位模式获取 Octomap")
+                    log_message("    (当需要实时 Octomap 时使用)")
 
-                log_message(f"执行命令: ros2 launch factor_perception...")
-                subprocess.Popen(cmd, shell=True)
+                    update_progress(30, "导出点云数据...")
 
-                update_progress(20, "步骤 3: 等待地图加载...")
-                log_message("步骤 3: 等待 RTAB-Map 加载地图数据")
+                    # 尝试导出点云作为备选
+                    cloud_file = output_file.replace('.bt', '.ply')
+                    export_cmd = f"rtabmap-export --db {db_path} --output {cloud_file} --cloud"
 
-                # 等待地图加载（动态进度）
-                import time
-                load_time = min(estimated_time * 0.6, 30)  # 最多等待30秒
-                wait_steps = int(load_time)
-                for i in range(wait_steps):
-                    time.sleep(1)
-                    progress = 20 + (i / wait_steps) * 30
-                    update_progress(progress, f"步骤 3: 等待地图加载 ({i+1}/{wait_steps}秒)")
+                    log_message("")
+                    log_message("步骤 3: 导出点云数据（备选方案）")
+                    log_message(f"  命令: {export_cmd}")
 
-                log_message(f"地图加载完成 (等待 {wait_steps}秒)")
+                    update_progress(50, "正在导出点云...")
+                    log_message("  执行导出...")
 
-                update_progress(50, "步骤 4: 检查 Octomap 数据...")
-                log_message("步骤 4: 检查 Octomap 话题是否发布")
+                    export_result = subprocess.run(
+                        export_cmd,
+                        shell=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=30
+                    )
 
-                # 检查 Octomap 话题
-                check_cmd = f"bash -c 'source {ros_setup} && timeout 5 ros2 topic list | grep octomap_binary'"
-                result = subprocess.run(check_cmd, shell=True, capture_output=True, text=True)
+                    if export_result.returncode == 0:
+                        update_progress(80, "处理导出结果...")
+                        log_message("  ✓ 点云导出成功")
 
-                if 'octomap_binary' in result.stdout:
-                    log_message("✓ Octomap 话题已发布")
-                    update_progress(60, "步骤 5: 捕获 Octomap 数据...")
-                    log_message("步骤 5: 从话题捕获 Octomap 数据")
-
-                    # 使用 Python 脚本保存
-                    save_script = "/home/yq/nav24r/scripts/save_octomap_from_topic.py"
-                    if os.path.exists(save_script):
-                        log_message(f"运行保存脚本: {save_script}")
-                        save_cmd = f"bash -c 'source {ros_setup} && timeout 10 python3 {save_script} {output_file}'"
-                        save_result = subprocess.run(save_cmd, shell=True, capture_output=True, text=True)
-
-                        update_progress(80, "步骤 6: 保存 Octomap 文件...")
-                        log_message(save_result.stdout)
-                        if save_result.stderr:
-                            log_message(f"错误: {save_result.stderr}")
+                        if os.path.exists(cloud_file):
+                            size = os.path.getsize(cloud_file) / (1024*1024)
+                            log_message(f"  ✓ 点云文件: {cloud_file}")
+                            log_message(f"  ✓ 文件大小: {size:.2f} MB")
+                            log_message("")
+                            log_message("后续操作:")
+                            log_message(f"  1. 在 Database Viewer 中导出 Octomap:")
+                            log_message(f"     rtabmap-databaseViewer {db_path}")
+                            log_message(f"     File → Export 3D clouds → Octomap")
+                            log_message("")
+                            log_message(f"  2. 或使用点云转换工具")
                     else:
-                        # 备用方法：直接录制话题
-                        log_message("使用备用方法：录制话题数据")
-                        echo_cmd = f"bash -c 'source {ros_setup} && timeout 10 ros2 topic echo /factor_perception/octomap_binary --once'"
-
-                        update_progress(70, "正在捕获数据...")
-                        log_message("捕获 Octomap 二进制数据...")
-
-                        # 这个方法需要手动解析，建议使用 Database Viewer
+                        log_message(f"  ✗ 导出失败: {export_result.stderr}")
                         log_message("")
-                        log_message("⚠️ 自动导出需要额外的 ROS 工具")
-                        log_message("推荐使用 GUI 方法导出：")
-                        log_message("  rtabmap-databaseViewer " + db_path)
-                        log_message("  File → Export 3D clouds → Octomap")
+                        log_message("解决方案:")
+                        log_message(f"  使用 Database Viewer: rtabmap-databaseViewer {db_path}")
+
+                    update_progress(100, "完成")
+                    log_message("")
+                    log_message("=" * 50)
+                    log_message("总结:")
+                    log_message("  • rtabmap-export 不直接支持 Octomap")
+                    log_message("  • Database Viewer 是导出 Octomap 的最佳方法")
+                    log_message("  • 点云数据已导出作为备选")
+                    log_message("=" * 50)
 
                 else:
-                    log_message("⚠️ Octomap 话题未发布")
-                    log_message("地图可能还未完全加载")
-
-                # 清理进程
-                update_progress(90, "步骤 7: 清理进程...")
-                log_message("步骤 7: 停止 RTAB-Map 进程")
-                subprocess.run("pkill -f 'ros2 launch'", shell=True)
-
-                # 检查输出文件
-                update_progress(95, "验证导出结果...")
-                log_message("")
-                log_message("=" * 50)
-
-                if os.path.exists(output_file):
-                    size = os.path.getsize(output_file) / 1024
-                    log_message("✅ 导出成功!")
-                    log_message(f"输出文件: {output_file}")
-                    log_message(f"文件大小: {size:.2f} KB")
+                    log_message("✗ rtabmap-export 不可用")
                     log_message("")
-                    log_message("后续操作:")
-                    log_message(f"  查看: octomap-viewer {output_file}")
-                    log_message(f"  信息: octomap-info {output_file}")
-                    update_progress(100, "✅ 导出完成!")
-                else:
-                    log_message("⚠️ 自动导出未成功")
-                    log_message("")
-                    log_message("推荐使用 GUI 导出方法:")
-                    log_message(f"  rtabmap-databaseViewer {db_path}")
-                    log_message("  File → Export 3D clouds")
-                    log_message("  选择 Octomap, 分辨率 {resolution}m")
-                    log_message("")
-                    log_message("这是最可靠的导出方法！")
-                    update_progress(100, "请使用 GUI 方法导出")
-
-                log_message("=" * 50)
+                    log_message("解决方案:")
+                    log_message(f"  安装工具: sudo apt install ros-jazzy-rtabmap-tools")
+                    log_message(f"  或使用 Database Viewer: rtabmap-databaseViewer {db_path}")
+                    update_progress(100, "需要安装工具")
 
                 # 启用关闭按钮
                 close_btn.config(state=tk.NORMAL)
-                self.status_var.set(f"状态: Octomap 导出完成 - {name}")
+                self.status_var.set(f"状态: 导出完成 - 建议使用 Database Viewer")
 
+            except subprocess.TimeoutExpired:
+                log_message("✗ 导出超时")
+                update_progress(0, "导出超时")
+                close_btn.config(state=tk.NORMAL)
             except Exception as e:
-                log_message(f"❌ 导出失败: {str(e)}")
+                log_message(f"✗ 导出失败: {str(e)}")
                 update_progress(0, f"导出失败: {str(e)}")
                 close_btn.config(state=tk.NORMAL)
                 logger.error(f"Octomap 导出失败: {e}")
@@ -600,14 +582,27 @@ class FactorControlPanel:
         thread.start()
 
     def view_database(self):
+        """打开 RTAB-Map Database Viewer 查看地图数据库"""
         name = self.get_map_name()
         if not name:
             messagebox.showerror("错误", "请选择地图")
             return
+
         db_path = self.get_db_path(name)
-        if os.path.exists(db_path):
-            subprocess.Popen(f"rtabmap-databaseViewer {db_path}", shell=True)
-            self.status_var.set(f"状态: 数据库查看器 | {name}")
+        if not os.path.exists(db_path):
+            messagebox.showerror("错误", f"地图文件不存在: {db_path}")
+            return
+
+        try:
+            # 使用 subprocess.Popen 启动，不等待完成
+            cmd = f"rtabmap-databaseViewer {db_path}"
+            subprocess.Popen(cmd, shell=True, start_new_session=True)
+            self.status_var.set(f"状态: Database Viewer 已启动 | {name}")
+            logger.info(f"启动 Database Viewer: {db_path}")
+        except Exception as e:
+            error_msg = f"启动 Database Viewer 失败: {str(e)}"
+            logger.error(error_msg)
+            messagebox.showerror("错误", error_msg)
 
     def stop_all(self):
         """停止所有 ROS2 进程和 RTAB-Map 相关窗口"""
