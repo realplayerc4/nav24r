@@ -4,16 +4,20 @@
 # 相机配置
 camera:
   # OAK-D 相机密钥（硬件绑定，无需保密）
-  # 根据相机型号选择对应的密钥
+  # 密钥用于激活 Factor Perception SDK
   keys:
-    OAK-D-PRO: "14442C105168D9D600"           # OAK-D Pro 相机
-    OAK-D-PRO-W: "12D0C1E7D1AB466C09BD9AE6427D5240"  # OAK-D Pro W 相机（当前使用）
-    OAK-D-S2: "B4C22057DAC5A53595D92CD44D06F91E"     # OAK-D S2 相机
+    OAK-D-PRO-W: "12D0C1E7D1AB466C09BD9AE6427D5240"  # OAK-D Pro W 密钥
+    OAK-D-S2: "B4C22057DAC5A53595D92CD44D06F91E"     # OAK-D S2 密钥
+
+  # OAK-D 相机机器码（MXID，设备序列号）
+  # 用于识别特定相机设备
+  mxids:
+    OAK-D-PRO: "14442C105168D9D600"  # OAK-D Pro 设备序列号
 
   # 当前默认配置
   model: "OAK-D-PRO-W"  # 当前使用的相机型号
-  key: "12D0C1E7D1AB466C09BD9AE6427D5240"  # 对应 Pro-W 的密钥
-  mxid: ""  # 自动检测或手动指定
+  key: "12D0C1E7D1AB466C09BD9AE6427D5240"  # Pro-W 的激活密钥
+  mxid: ""  # 自动检测或手动指定设备序列号
 
 # ROS 配置
 ros:
