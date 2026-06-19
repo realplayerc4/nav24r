@@ -104,11 +104,42 @@
       "Bash(rsync -av --exclude=.git --exclude=__pycache__ --exclude=.cache --exclude=.venv ~/nav24r/ /media/yq/1234-5678/nav24r_backup/nav24r/)",
       "Bash(cp -r ~/rtabmap_maps /media/yq/1234-5678/nav24r_backup/)",
       "Bash(mkdir -p /media/yq/1234-5678/nav24r_backup/.claude)",
-      "Bash(cp -r ~/.claude/* /media/yq/1234-5678/nav24r_backup/.claude/)"
+      "Bash(cp -r ~/.claude/* /media/yq/1234-5678/nav24r_backup/.claude/)",
+      "Bash(cat /tmp/control_panel.log 2>/dev/null || echo \"日志文件不存在\")",
+      "Read(//tmp/**)",
+      "Bash(ip link *)",
+      "Bash(awk '{print $2}')",
+      "Bash(echo \"新的控制面板已启动，PID: $!\")",
+      "Bash(chmod +x /home/yq/.local/share/applications/factor_perception_control_panel.desktop)",
+      "Bash(chmod +x /home/yq/Desktop/Factor_Perception_Control_Panel.desktop)",
+      "Bash(find /usr/share/icons -name \"*robot*\" -o -name \"*navigation*\" -o -name \"*map*\" 2>/dev/null | grep -E \"48x48|64x64|scalable\" | head -5)",
+      "Read(//usr/share/icons/**)",
+      "Bash(xargs ls -lh)",
+      "Bash(sqlite3 ~/rtabmap_maps/map_20260615_1424.db \"SELECT COUNT\\(*\\) as total_nodes FROM Node;\")",
+      "Bash(sqlite3 ~/rtabmap_maps/map_20260615_1424.db \"SELECT MIN\\(stamp\\), MAX\\(stamp\\), COUNT\\(*\\) FROM Node;\")",
+      "Bash(sqlite3 ~/rtabmap_maps/map_20260615_1424.db \"SELECT COUNT\\(*\\) as total_landmarks FROM Landmark;\")",
+      "Bash(sqlite3 ~/rtabmap_maps/map_20260615_1424.db \"SELECT id, stamp, \\(SELECT COUNT\\(*\\) FROM Link WHERE from_id = id OR to_id = id\\) as links FROM Node ORDER BY stamp DESC LIMIT 10;\")",
+      "Bash(awk '{print $9, $5}')",
+      "Bash(python3 /home/yq/nav24r/scripts/factor_control_panel.py > /tmp/control_panel.log 2>&1 & *)",
+      "Bash(echo \"控制面板已重启，PID: $!\")",
+      "Bash(echo \"控制面板已更新并重启，PID: $!\")",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:introlab.github.io)",
+      "WebFetch(domain:en.wikipedia.org)",
+      "WebFetch(domain:official-rtab-map-forum.67519.x6.nabble.com)",
+      "Bash(gh api *)",
+      "Bash(nm -C /opt/ros/jazzy/lib/x86_64-linux-gnu/librtabmap_core.so)",
+      "Bash(journalctl --since \"2026-06-18\" --priority 0..3 -n 100)",
+      "Bash(dmesg -T)",
+      "Bash(journalctl --list-boots)",
+      "WebFetch(domain:mcp.flowus.cn)",
+      "Bash(gh repo *)"
     ],
     "additionalDirectories": [
       "/home/yq",
-      "/opt/ros/humble/share/factor_perception/config"
+      "/opt/ros/humble/share/factor_perception/config",
+      "/tmp"
     ]
   }
 }
