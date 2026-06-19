@@ -1,0 +1,189 @@
+# RTAB-Map 轻量化 RViz 配置
+# 包含3D点云和Octomap，减少不必要的显示
+
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Status1
+  - Class: rviz_common/Time
+    Experimental: false
+    Name: Time
+
+Visualization Manager:
+  Displays:
+    # 基础网格
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+      Plane Cell Count: 40
+      Reference Frame: <Fixed Frame>
+
+    # 机器人模型
+    - Class: rviz_default_plugins/RobotModel
+      Description Topic:
+        Value: /robot_description
+      Enabled: true
+      Name: RobotModel
+
+    # 简化TF显示
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frames:
+        All Enabled: false
+        base_link:
+          Value: true
+        odom:
+          Value: true
+        map:
+          Value: true
+        oak_rgb_optical_frame:
+          Value: true
+      Marker Scale: 0.3
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+
+    # 2D 占据栅格地图
+    - Class: rviz_default_plugins/Map
+      Enabled: true
+      Name: OccupancyMap
+      Topic:
+        Depth: 5
+        Reliability Policy: Reliable
+        Value: /factor_perception/map
+      Color Scheme: map
+      Draw Behind: false
+
+    # 3D 点云地图 (RTAB-Map)
+    - Class: rtabmap_rviz_plugins/MapCloud
+      Download namespace: factor_perception
+      Enabled: true
+      Name: MapCloud3D
+      Size (Pixels): 3
+      Style: Points
+      Topic:
+        Reliability Policy: Best Effort
+        Value: /factor_perception/mapData
+      Max Depth Threshold: 10.0
+      Min Depth Threshold: 0.0
+
+    # Octomap 彩色占据栅格
+    - Class: octomap_rviz_plugins/ColorOccupancyGrid
+      Enabled: true
+      Name: OctomapColor
+      Topic:
+        Reliability Policy: Best Effort
+        Value: /factor_perception/octomap_binary
+      Color Factor: 0.8
+
+    # RTAB-Map 信息面板
+    - Class: rtabmap_rviz_plugins/Info
+      Enabled: true
+      Name: RTABMapInfo
+      Topic:
+        Reliability Policy: Best Effort
+        Value: /factor_perception/info
+
+    # 地图拓扑图
+    - Class: rtabmap_rviz_plugins/MapGraph
+      Enabled: true
+      Name: MapGraph
+      Topic:
+        Reliability Policy: Best Effort
+        Value: /factor_perception/mapGraph
+
+    # 实时障碍物点云
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: ObstacleCloud
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
+        Value: /factor_perception/cloud_obstacles
+      Color: 255; 85; 0
+      Size (Pixels): 3
+      Size (m): 0.05
+      Style: Flat Squares
+      Use Fixed Frame: true
+
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 10
+
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/SetInitialPose
+      Topic:
+        Reliability Policy: Reliable
+        Value: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Reliability Policy: Reliable
+        Value: /goal_pose
+
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Angle: 0
+      Scale: 50
+      Target Frame: <Fixed Frame>
+      Value: TopDownOrtho (rviz_default_plugins)
+      X: 0
+      Y: 0
+    Saved:
+      - Class: rviz_default_plugins/ThirdPersonFollower
+        Distance: 10
+        Enable Stereo Rendering:
+          Stereo Eye Separation: 0.06
+          Stereo Focal Distance: 1
+          Swap Stereo Eyes: false
+          Value: false
+        Focal Point:
+          X: 0
+          Y: 0
+          Z: 0
+        Focal Shape Fixed Size: true
+        Focal Shape Size: 0.5
+        Invert Z Axis: false
+        Name: 3DView
+        Near Clip Distance: 0.01
+        Pitch: 45
+        Target Frame: base_link
+        Viewport Grid Visible: true
+        Yaw: 0
+      - Class: rviz_default_plugins/TopDownOrtho
+        Enable Stereo Rendering:
+          Stereo Eye Separation: 0.06
+          Stereo Focal Distance: 1
+          Swap Stereo Eyes: false
+          Value: false
+        Invert Z Axis: false
+        Name: TopDownMap
+        Near Clip Distance: 0.01
+        Angle: 0
+        Scale: 50
+        Target Frame: map
+        X: 0
+        Y: 0
+
+Window Geometry:
+  QMainWindow State: 000000ff00000000fd00000003000000000000013c0000025ffc0200000008fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000006400fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000100044006900730070006c00610079007301000000410000025f000000dd00fffffffb0000000a0056006900650077007301000000410000025f000000b000fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a0056006900650077030000004e00000080000002e10000019700000003000004420000003efc0100000002fb0000000800540069006d00650100000000000004420000028900fffffffb0000000800540069006d00650100000000000004500000000000000000000001eb0000025f00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Displays: collapsed=false
+  Selection: collapsed=false
+  Time: collapsed=false

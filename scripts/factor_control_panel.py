@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Factor Perception 控制面板
+带设备检测和相机重启功能
 """
 
 import tkinter as tk
@@ -11,6 +12,9 @@ import json
 import logging
 import yaml
 from datetime import datetime
+import glob
+import threading
+import time
 
 # 配置日志
 logging.basicConfig(
@@ -19,23 +23,32 @@ logging.basicConfig(
     filename='/tmp/factor_control_panel.log'
 )
 logger = logging.getLogger(__name__)
-import glob
-from datetime import datetime
 
 class FactorControlPanel:
     def __init__(self, root):
         self.root = root
         self.root.title("Factor Perception 控制面板")
-        self.root.geometry("600x500")
+        self.root.geometry("650x600")
 
         # 加载配置
         self.load_app_config()
+
+        # 续建模式标记
+        self.is_continue = False
+
+        # 设备状态
+        self.device_connected = False
+        self.device_check_thread = None
+        self.auto_check_enabled = True
 
         self.config_file = "/home/yq/nav24r/config/maps_config.json"
         self.maps_dir = os.path.expanduser("~/rtabmap_maps")
 
         self.load_config()
         self.create_ui()
+
+        # 启动设备检测
+        self.start_device_monitor()
 
     def load_app_config(self):
         """加载应用配置文件"""
@@ -76,7 +89,41 @@ class FactorControlPanel:
                 font=('Arial', 16, 'bold'), fg='#00ff88', bg='#2b2b2b').pack(pady=10)
         self.root.configure(bg='#2b2b2b')
 
-        # 地图管理
+        # === 设备状态区域（新增） ===
+        device_frame = tk.LabelFrame(self.root, text="📷 OAK-D 设备状态", font=('Arial', 11), padx=10, pady=10)
+        device_frame.pack(fill=tk.X, padx=20, pady=5)
+
+        # 设备状态显示
+        status_row = tk.Frame(device_frame)
+        status_row.pack(fill=tk.X, pady=3)
+
+        self.device_status_var = tk.StringVar(value="⏳ 正在检测设备...")
+        self.device_status_label = tk.Label(status_row, textvariable=self.device_status_var,
+                                            font=('Arial', 10, 'bold'), fg='#ffaa00')
+        self.device_status_label.pack(side=tk.LEFT)
+
+        # 设备详情
+        self.device_info_var = tk.StringVar(value="")
+        tk.Label(status_row, textvariable=self.device_info_var, font=('Arial', 9), fg='#888888').pack(side=tk.LEFT, padx=10)
+
+        # 设备操作按钮
+        device_btn_row = tk.Frame(device_frame)
+        device_btn_row.pack(fill=tk.X, pady=5)
+
+        tk.Button(device_btn_row, text="🔍 检测设备", width=12, height=1,
+                 command=self.check_device_now, bg='#3d5a80', fg='white').pack(side=tk.LEFT, padx=3)
+        tk.Button(device_btn_row, text="🔄 重启相机", width=12, height=1,
+                 command=self.restart_camera, bg='#e07c24', fg='white').pack(side=tk.LEFT, padx=3)
+        tk.Button(device_btn_row, text="⚡ 强制重连", width=12, height=1,
+                 command=self.force_reconnect, bg='#e63946', fg='white').pack(side=tk.LEFT, padx=3)
+
+        # 自动检测开关
+        self.auto_check_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(device_btn_row, text="自动检测", variable=self.auto_check_var,
+                      command=self.toggle_auto_check, bg='#2b2b2b', fg='white',
+                      selectcolor='#2b2b2b', activebackground='#2b2b2b').pack(side=tk.RIGHT, padx=5)
+
+        # === 地图管理 ===
         map_frame = tk.LabelFrame(self.root, text="地图管理", font=('Arial', 11), padx=10, pady=10)
         map_frame.pack(fill=tk.X, padx=20, pady=5)
 
@@ -133,6 +180,10 @@ class FactorControlPanel:
         self.status_var = tk.StringVar(value="状态: 就绪")
         tk.Label(self.root, textvariable=self.status_var, fg='#00ff88', bg='#2b2b2b', font=('Arial', 10)).pack(pady=10)
 
+        # 续建模式指示
+        self.continue_var = tk.StringVar(value="")
+        tk.Label(self.root, textvariable=self.continue_var, fg='#e07c24', bg='#2b2b2b', font=('Arial', 9)).pack()
+
         # 信息
         tk.Label(self.root, text="地图存储: ~/rtabmap_maps/<map_id>.db", fg='#888888', bg='#2b2b2b').pack()
 
@@ -181,9 +232,16 @@ class FactorControlPanel:
         if not name:
             messagebox.showerror("错误", "请选择地图")
             return
+        db_path = self.get_db_path(name)
+        if not os.path.exists(db_path):
+            messagebox.showerror("错误", f"地图文件不存在: {db_path}")
+            return
         self.map_id_entry.delete(0, tk.END)
         self.map_id_entry.insert(0, name)
+        self.is_continue = True
+        self.continue_var.set("🔄 续建模式: 将加载已有地图数据继续建图")
         self.status_var.set(f"状态: 续建 '{name}'")
+        logger.info(f"设置续建模式: {name}, 数据库: {db_path}")
 
     def delete_map(self):
         name = self.get_map_name()
@@ -202,6 +260,10 @@ class FactorControlPanel:
 
     def start_mapping(self):
         """开始建图"""
+        # 先检查设备
+        if not self.check_device_before_launch():
+            return
+
         try:
             map_id = self.map_id_entry.get().strip()
             if not map_id:
@@ -210,16 +272,34 @@ class FactorControlPanel:
             db_path = self.get_db_path(map_id)
             ros_setup = self.app_config['ros']['setup_path']
             camera_key = self.app_config['camera']['key']
-            cmd = f"bash -c 'source {ros_setup} && ros2 launch /home/yq/nav24r/factor_perception_auto.launch.py localization:=false rtabmap_viz:=true database_path:={db_path} key:={camera_key}'"
+            project_root = self.app_config['paths']['project_root']
+
+            # 判断是否为续建模式
+            if self.is_continue and os.path.exists(db_path):
+                # 续建：加载已有地图数据继续建图
+                cmd = f"bash -c 'source {ros_setup} && ros2 launch {project_root}/factor_perception_auto.launch.py localization:=false rtabmap_viz:=true database_path:={db_path} key:={camera_key} continue_mapping:=true'"
+                self.status_var.set(f"状态: 续建模式 | {map_id} (加载已有地图)")
+                logger.info(f"启动续建模式: {map_id}, 数据库: {db_path}")
+            else:
+                # 新建图
+                cmd = f"bash -c 'source {ros_setup} && ros2 launch {project_root}/factor_perception_auto.launch.py localization:=false rtabmap_viz:=true database_path:={db_path} key:={camera_key}'"
+                self.status_var.set(f"状态: 建图模式 | {map_id}")
+                logger.info(f"启动建图模式: {map_id}, 数据库: {db_path}")
+
             subprocess.Popen(cmd, shell=True)
-            self.status_var.set(f"状态: 建图模式 | {map_id}")
-            logger.info(f"启动建图模式: {map_id}, 数据库: {db_path}")
+            # 重置续建标记
+            self.is_continue = False
+            self.continue_var.set("")
         except Exception as e:
             logger.error(f"启动建图失败: {e}")
             messagebox.showerror("错误", f"启动建图失败: {str(e)}")
 
     def start_navigation(self):
         """开始导航"""
+        # 先检查设备
+        if not self.check_device_before_launch():
+            return
+
         try:
             name = self.get_map_name()
             if not name:
@@ -252,23 +332,31 @@ class FactorControlPanel:
         if not os.path.exists(db_path):
             messagebox.showerror("错误", "地图不存在")
             return
-        cmd = f"bash -c 'source /opt/ros/jazzy/setup.bash && ros2 launch /home/yq/nav24r/launch/nav24r_full.launch.py database_path:={db_path}'"
+        ros_setup = self.app_config['ros']['setup_path']
+        project_root = self.app_config['paths']['project_root']
+        cmd = f"bash -c 'source {ros_setup} && ros2 launch {project_root}/launch/nav24r_full.launch.py database_path:={db_path} key:={camera_key}'"
         subprocess.Popen(cmd, shell=True)
         self.status_var.set(f"状态: 完整导航 | {name}")
 
     def launch_rviz(self):
         """启动 RViz（顶视角配置）"""
-        subprocess.Popen("bash -c 'source /opt/ros/jazzy/setup.bash && rviz2 -d /home/yq/nav24r/config/mapping.rviz'", shell=True)
+        ros_setup = self.app_config['ros']['setup_path']
+        config_dir = self.app_config['paths']['config_dir']
+        subprocess.Popen(f"bash -c 'source {ros_setup} && rviz2 -d {config_dir}/mapping.rviz'", shell=True, start_new_session=True)
         self.status_var.set("状态: RViz 已启动（顶视角）")
 
     def launch_rviz_3d(self):
         """启动 RViz（3D 视角配置）"""
-        subprocess.Popen("bash -c 'source /opt/ros/jazzy/setup.bash && rviz2 -d /home/yq/nav24r/config/mapping_3d.rviz'", shell=True)
+        ros_setup = self.app_config['ros']['setup_path']
+        config_dir = self.app_config['paths']['config_dir']
+        subprocess.Popen(f"bash -c 'source {ros_setup} && rviz2 -d {config_dir}/mapping_3d.rviz'", shell=True, start_new_session=True)
         self.status_var.set("状态: RViz 3D 已启动（多视角）")
 
     def launch_map_viewer(self):
         """启动地图观察器（专门用于查看已建好的地图）"""
-        subprocess.Popen("bash -c 'source /opt/ros/jazzy/setup.bash && rviz2 -d /home/yq/nav24r/config/map_viewer_3d.rviz'", shell=True)
+        ros_setup = self.app_config['ros']['setup_path']
+        config_dir = self.app_config['paths']['config_dir']
+        subprocess.Popen(f"bash -c 'source {ros_setup} && rviz2 -d {config_dir}/map_viewer_3d.rviz'", shell=True, start_new_session=True)
         self.status_var.set("状态: 地图观察器已启动（3D 查看器）")
 
     def view_map_only(self):
@@ -568,6 +656,261 @@ class FactorControlPanel:
         subprocess.run("pkill -9 -f 'factor_perception'", shell=True)
 
         self.status_var.set("状态: 已停止所有进程")
+
+    # ==================== 设备检测功能 ====================
+
+    def check_oak_device(self):
+        """检测 OAK-D 设备是否连接"""
+        try:
+            # 方法1: 通过 lsusb 检测
+            result = subprocess.run(
+                ['lsusb'],
+                capture_output=True, text=True, timeout=5
+            )
+            usb_devices = result.stdout
+
+            # OAK-D 设备可能的 vendor ID
+            oak_ids = ['03e7', '1443', '2e1d', 'luxonis']
+
+            for oak_id in oak_ids:
+                if oak_id.lower() in usb_devices.lower():
+                    # 尝试获取设备详细信息
+                    try:
+                        detail_result = subprocess.run(
+                            ['lsusb', '-d', f'{oak_id}:'],
+                            capture_output=True, text=True, timeout=3
+                        )
+                        lines = detail_result.stdout.strip().split('\n')
+                        device_info = ""
+                        for line in lines:
+                            if 'ID' in line:
+                                parts = line.split('ID')
+                                if len(parts) > 1:
+                                    device_info = parts[1].strip()
+                                    break
+                        return True, device_info if device_info else "OAK-D 设备"
+                    except:
+                        return True, "OAK-D 设备"
+
+            # 方法2: 检查 /dev 目录
+            import glob as g
+            video_devices = g.glob('/dev/video*')
+            if video_devices:
+                # 有视频设备，但需要进一步确认是否是 OAK-D
+                # 这只是备用检测方法
+                pass
+
+            return False, ""
+
+        except subprocess.TimeoutExpired:
+            logger.error("设备检测超时")
+            return False, "检测超时"
+        except Exception as e:
+            logger.error(f"设备检测失败: {e}")
+            return False, f"检测失败: {str(e)}"
+
+    def update_device_status(self):
+        """更新设备状态显示"""
+        connected, info = self.check_oak_device()
+        self.device_connected = connected
+
+        if connected:
+            self.device_status_var.set("✅ 设备已连接")
+            self.device_status_label.config(fg='#00ff88')
+            self.device_info_var.set(info)
+        else:
+            self.device_status_var.set("❌ 设备未连接")
+            self.device_status_label.config(fg='#e63946')
+            self.device_info_var.set("请连接 OAK-D 相机")
+
+    def start_device_monitor(self):
+        """启动设备监控线程"""
+        def monitor():
+            while self.auto_check_enabled:
+                try:
+                    self.root.after(0, self.update_device_status)
+                    time.sleep(3)  # 每3秒检测一次
+                except Exception as e:
+                    logger.error(f"设备监控异常: {e}")
+                    break
+
+        self.device_check_thread = threading.Thread(target=monitor, daemon=True)
+        self.device_check_thread.start()
+        logger.info("设备监控已启动")
+
+    def check_device_now(self):
+        """立即检测设备"""
+        self.device_status_var.set("⏳ 正在检测设备...")
+        self.root.update()
+        self.update_device_status()
+
+        if self.device_connected:
+            messagebox.showinfo("设备检测", "✅ OAK-D 设备已连接\n可以正常启动系统")
+        else:
+            messagebox.showwarning("设备检测",
+                "❌ 未检测到 OAK-D 设备\n\n"
+                "请检查:\n"
+                "1. 相机 USB 线是否连接\n"
+                "2. USB 线是否插紧（建议 USB 3.0）\n"
+                "3. 相机电源是否正常\n\n"
+                "连接后点击 '重启相机' 或 '强制重连'")
+
+    def toggle_auto_check(self):
+        """切换自动检测"""
+        self.auto_check_enabled = self.auto_check_var.get()
+        if self.auto_check_enabled:
+            logger.info("已启用自动设备检测")
+            if not self.device_check_thread or not self.device_check_thread.is_alive():
+                self.start_device_monitor()
+        else:
+            logger.info("已禁用自动设备检测")
+
+    def restart_camera(self):
+        """重启相机（软重启）"""
+        if not self.device_connected:
+            # 尝试重新检测
+            self.check_device_now()
+            if not self.device_connected:
+                messagebox.showwarning("重启失败",
+                    "设备未连接，无法重启\n\n"
+                    "请先连接 OAK-D 相机")
+                return
+
+        self.status_var.set("状态: 正在重启相机...")
+        self.device_status_var.set("⏳ 正在重启相机...")
+        self.root.update()
+
+        try:
+            # 重置 USB 设备（软重启）
+            # 查找 OAK-D 设备的 USB 路径
+            result = subprocess.run(
+                "lsusb | grep -iE '03e7|1443|luxonis' | head -1",
+                shell=True, capture_output=True, text=True, timeout=5
+            )
+
+            if result.stdout:
+                # 找到设备，尝试重置
+                logger.info("尝试软重启 OAK-D 设备")
+
+                # 重置 USB 端口
+                reset_cmd = """
+for dev in /sys/bus/usb/devices/*; do
+    if [ -f "$dev/idVendor" ] && [ -f "$dev/idProduct" ]; then
+        vendor=$(cat "$dev/idVendor" 2>/dev/null)
+        if echo "$vendor" | grep -qiE "03e7|1443"; then
+            echo "$dev" | xargs -I{} sh -c 'echo {} > /sys/bus/usb/drivers/usb/unbind 2>/dev/null; echo {} > /sys/bus/usb/drivers/usb/bind 2>/dev/null' &
+        fi
+    fi
+done
+"""
+                subprocess.run(reset_cmd, shell=True, timeout=10)
+
+                # 等待设备重新枚举
+                time.sleep(2)
+
+                # 重新检测
+                self.update_device_status()
+
+                if self.device_connected:
+                    self.status_var.set("状态: 相机重启成功")
+                    messagebox.showinfo("成功", "✅ 相机重启成功！")
+                    logger.info("相机重启成功")
+                else:
+                    self.status_var.set("状态: 相机重启失败")
+                    messagebox.showwarning("重启失败",
+                        "软重启失败，请尝试:\n"
+                        "1. 点击 '强制重连'\n"
+                        "2. 或物理重新插拔 USB 线")
+            else:
+                messagebox.showwarning("重启失败", "无法找到 OAK-D 设备")
+
+        except Exception as e:
+            logger.error(f"重启相机失败: {e}")
+            messagebox.showerror("错误", f"重启相机失败:\n{str(e)}")
+            self.status_var.set("状态: 重启失败")
+
+    def force_reconnect(self):
+        """强制重连相机（停止所有进程后重新连接）"""
+        # 确认操作
+        if not messagebox.askyesno("强制重连",
+            "这将停止所有运行中的 ROS2 进程，然后尝试重新连接相机。\n\n"
+            "确定要继续吗？"):
+            return
+
+        self.status_var.set("状态: 正在强制重连相机...")
+        self.device_status_var.set("⏳ 正在强制重连...")
+        self.root.update()
+
+        try:
+            # 步骤1: 停止所有相关进程
+            logger.info("停止所有 ROS2 进程...")
+            self.stop_all()
+            time.sleep(2)
+
+            # 步骤2: 重置 USB
+            logger.info("重置 USB 设备...")
+            reset_cmd = """
+for dev in /sys/bus/usb/devices/*; do
+    if [ -f "$dev/idVendor" ]; then
+        vendor=$(cat "$dev/idVendor" 2>/dev/null)
+        if echo "$vendor" | grep -qiE "03e7|1443|2e1d"; then
+            echo "Resetting: $dev"
+            echo "$dev" | xargs -I{} sh -c 'echo {} > /sys/bus/usb/drivers/usb/unbind 2>/dev/null'
+            sleep 1
+            echo "$dev" | xargs -I{} sh -c 'echo {} > /sys/bus/usb/drivers/usb/bind 2>/dev/null'
+        fi
+    fi
+done
+"""
+            subprocess.run(reset_cmd, shell=True, timeout=15)
+
+            # 步骤3: 等待设备重新枚举
+            time.sleep(3)
+
+            # 步骤4: 重新检测设备
+            self.update_device_status()
+
+            if self.device_connected:
+                self.status_var.set("状态: 强制重连成功")
+                messagebox.showinfo("成功",
+                    "✅ 相机强制重连成功！\n\n"
+                    "设备已重新识别，可以启动系统")
+                logger.info("强制重连成功")
+            else:
+                self.status_var.set("状态: 设备仍未连接")
+                messagebox.showwarning("重连失败",
+                    "❌ 相机仍未检测到\n\n"
+                    "请尝试:\n"
+                    "1. 物理重新插拔 USB 线\n"
+                    "2. 检查 USB 线是否损坏\n"
+                    "3. 尝试不同的 USB 端口")
+
+        except Exception as e:
+            logger.error(f"强制重连失败: {e}")
+            messagebox.showerror("错误", f"强制重连失败:\n{str(e)}")
+            self.status_var.set("状态: 重连失败")
+
+    def check_device_before_launch(self):
+        """启动前检查设备状态"""
+        self.update_device_status()
+
+        if not self.device_connected:
+            result = messagebox.askyesno(
+                "设备未连接",
+                "⚠️ 未检测到 OAK-D 设备！\n\n"
+                "启动 Factor Perception 需要连接相机。\n"
+                "如果相机已连接，可能被其他程序占用或驱动异常。\n\n"
+                "是否尝试强制重连？\n"
+                "(将停止所有 ROS2 进程并重置设备)"
+            )
+            if result:
+                self.force_reconnect()
+                # 再次检测
+                self.update_device_status()
+                return self.device_connected
+            return False
+
+        return True
 
 if __name__ == "__main__":
     root = tk.Tk()

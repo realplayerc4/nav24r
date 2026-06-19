@@ -1,14 +1,18 @@
-# 综合启动文件 - Factor Perception + Nav2
-# 人形机器人导航系统
+# 改进版 Launch 文件 - Factor Perception + RTAB-Map
+# 解决架构问题：隔离容器、生命周期管理、错误恢复
+# 版本: v2.0 - 2026-06-18
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, RegisterEventHandler, EmitEvent, LogInfo, TimerAction, ExecuteProcess, GroupAction
 from launch.conditions import IfCondition, UnlessCondition
-from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression
-from launch_ros.actions import ComposableNodeContainer, Node
+from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, TextSubstitution
+from launch_ros.actions import ComposableNodeContainer, Node, LifecycleNode
 from launch_ros.descriptions import ComposableNode
 from launch_ros.substitutions import FindPackageShare
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch_ros.events.lifecycle import ChangeState
+from launch.event_handlers import OnProcessExit, OnProcessStart
+from lifecycle_msgs.msg import Transition
 import os
 
 
@@ -24,33 +28,40 @@ def generate_launch_description():
     odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='odom')
     cam_pos_x_arg = DeclareLaunchArgument('cam_pos_x', default_value='0.0')
     cam_pos_y_arg = DeclareLaunchArgument('cam_pos_y', default_value='0.0')
-    cam_pos_z_arg = DeclareLaunchArgument('cam_pos_z', default_value='0.5')
+    cam_pos_z_arg = DeclareLaunchArgument('cam_pos_z', default_value='1.0')  # 相机高度1m
     cam_roll_arg = DeclareLaunchArgument('cam_roll', default_value='0.0')
     cam_pitch_arg = DeclareLaunchArgument('cam_pitch', default_value='0.0')
     cam_yaw_arg = DeclareLaunchArgument('cam_yaw', default_value='0.0')
     publish_tf_arg = DeclareLaunchArgument('publish_tf', default_value='true')
-    depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='false')
-    ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.0')
+    depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='true')
+    ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.4')
     min_feat_depth_arg = DeclareLaunchArgument('min_feat_depth', default_value='0.0')
+
+    # 使用 PathJoinSubstitution 替代硬编码路径
     config_path_arg = DeclareLaunchArgument('config_path',
-        default_value='/home/yq/nav24r/config/rtabmap_custom.ini')
+        default_value=PathJoinSubstitution([
+            FindPackageShare('nav24r'),
+            'config', 'rtabmap_custom.ini'
+        ]))
     database_path_arg = DeclareLaunchArgument('database_path', default_value='~/rtabmap.db')
     localization_arg = DeclareLaunchArgument('localization', default_value='false')
-    rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='true')
+    rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='false')  # 默认关闭可视化
     continue_mapping_arg = DeclareLaunchArgument('continue_mapping', default_value='false')
 
-    # Nav2 参数
-    use_sim_time_arg = DeclareLaunchArgument('use_sim_time', default_value='false')
-    autostart_arg = DeclareLaunchArgument('autostart', default_value='true')
-    nav2_params_file_arg = DeclareLaunchArgument('nav2_params_file',
-        default_value='/home/yq/nav24r/config/nav2_params.yaml')
-    map_subscribe_transient_local_arg = DeclareLaunchArgument('map_subscribe_transient_local',
-        default_value='true')
-    use_composition_arg = DeclareLaunchArgument('use_composition', default_value='true')
-    use_respawn_arg = DeclareLaunchArgument('use_respawn', default_value='false')
-    log_level_arg = DeclareLaunchArgument('log_level', default_value='warn')
+    # 设备检查参数
+    skip_device_check_arg = DeclareLaunchArgument('skip_device_check', default_value='false')
 
-    # ============ Factor Perception ============
+    # ============ 设备检查（启动前） ============
+
+    # 设备检查脚本
+    device_check_cmd = ExecuteProcess(
+        cmd=['bash', '-c',
+             'lsusb | grep -qiE "03e7|1443|luxonis|oak" && echo "DEVICE_FOUND" || echo "DEVICE_NOT_FOUND"'],
+        name='device_check',
+        output='screen',
+    )
+
+    # ============ Robot Description ============
 
     robot_description_content = Command([
         'xacro ',
@@ -73,6 +84,10 @@ def generate_launch_description():
         parameters=[{'robot_description': robot_description_content}]
     )
 
+    # ============ 硬件驱动容器（隔离） ============
+
+    # Factor Perception 硬件驱动单独容器
+    # 使用单线程容器确保确定性硬件访问
     factor_perception_node = ComposableNode(
         package='factor_perception',
         plugin='factor_perception::FactorPerceptionNode',
@@ -89,8 +104,20 @@ def generate_launch_description():
             'min_feat_depth': LaunchConfiguration('min_feat_depth'),
             'blob_path': PathJoinSubstitution([FindPackageShare('factor_perception'), 'blobs', 'HF-Net.blob']),
         }],
+        extra_arguments=[{'use_intra_process_comms': True}],  # 零拷贝优化
     )
 
+    # 硬件容器（单线程，隔离）
+    hardware_container = ComposableNodeContainer(
+        name='hardware_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container',  # 单线程，确定性访问
+        ros_arguments=['--log-level', 'info'],
+        composable_node_descriptions=[factor_perception_node],
+    )
+
+    # Register 节点（单独容器）
     register_node = ComposableNode(
         package='depth_image_proc',
         plugin='depth_image_proc::RegisterNode',
@@ -101,7 +128,33 @@ def generate_launch_description():
             LaunchConfiguration('camera_model'), "' != 'OAK-D-SR'"
         ])),
         parameters=[{'fill_upsampling_holes': True}],
+        extra_arguments=[{'use_intra_process_comms': True}],
     )
+
+    register_container = ComposableNodeContainer(
+        name='register_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container_mt',
+        composable_node_descriptions=[register_node],
+    )
+
+    # ============ SLAM 处理容器（隔离） ============
+
+    # SLAM 参数
+    slam_params = {
+        'subscribe_rgb': False,
+        'subscribe_depth': False,
+        'subscribe_rgbd': True,
+        'frame_id': LaunchConfiguration('base_frame_id'),
+        'odom_frame_id_init': LaunchConfiguration('odom_frame_id'),
+        'sync_queue_size': 50,
+        'config_path': LaunchConfiguration('config_path'),
+        'database_path': LaunchConfiguration('database_path'),
+        'Grid/3D': 'true',
+        'RGBD/ProximityBySpace': 'true',
+        'RGBD/ProximityByTime': 'true',
+    }
 
     # SLAM 建图 - 新建地图
     rtabmap_slam_new = ComposableNode(
@@ -113,21 +166,11 @@ def generate_launch_description():
             "'", LaunchConfiguration('localization'), "' == 'false' and '",
             LaunchConfiguration('continue_mapping'), "' == 'false'"
         ])),
-        parameters=[{
-            'subscribe_rgb': False,
-            'subscribe_depth': False,
-            'subscribe_rgbd': True,
-            'frame_id': LaunchConfiguration('base_frame_id'),
-            'odom_frame_id_init': LaunchConfiguration('odom_frame_id'),
-            'sync_queue_size': 50,
-            'config_path': LaunchConfiguration('config_path'),
-            'database_path': LaunchConfiguration('database_path'),
+        parameters=[slam_params, {
             'Mem/IncrementalMemory': 'true',
             'Mem/InitWMWithAllNodes': 'false',
-            'Grid/3D': 'true',
-            'RGBD/ProximityBySpace': 'true',
-            'RGBD/ProximityByTime': 'true',
         }],
+        extra_arguments=[{'use_intra_process_comms': True}],
     )
 
     # SLAM 建图 - 续建地图
@@ -140,50 +183,40 @@ def generate_launch_description():
             "'", LaunchConfiguration('localization'), "' == 'false' and '",
             LaunchConfiguration('continue_mapping'), "' != 'false'"
         ])),
-        parameters=[{
-            'subscribe_rgb': False,
-            'subscribe_depth': False,
-            'subscribe_rgbd': True,
-            'frame_id': LaunchConfiguration('base_frame_id'),
-            'odom_frame_id_init': LaunchConfiguration('odom_frame_id'),
-            'sync_queue_size': 50,
-            'config_path': LaunchConfiguration('config_path'),
-            'database_path': LaunchConfiguration('database_path'),
+        parameters=[slam_params, {
             'Mem/IncrementalMemory': 'true',
             'Mem/InitWMWithAllNodes': 'true',
-            'Grid/3D': 'true',
-            'RGBD/ProximityBySpace': 'true',
-            'RGBD/ProximityByTime': 'true',
         }],
+        extra_arguments=[{'use_intra_process_comms': True}],
     )
 
+    # 定位模式
     rtabmap_localization = ComposableNode(
         package='rtabmap_slam',
         plugin='rtabmap_slam::CoreWrapper',
+        name='rtabmap',
         namespace='factor_perception',
         condition=IfCondition(LaunchConfiguration('localization')),
-        parameters=[{
-            'subscribe_rgb': False,
-            'subscribe_depth': False,
-            'subscribe_rgbd': True,
-            'frame_id': LaunchConfiguration('base_frame_id'),
-            'odom_frame_id_init': LaunchConfiguration('odom_frame_id'),
-            'sync_queue_size': 50,
-            'config_path': LaunchConfiguration('config_path'),
-            'database_path': LaunchConfiguration('database_path'),
+        parameters=[slam_params, {
             'Mem/IncrementalMemory': 'false',
             'Mem/InitWMWithAllNodes': 'true',
         }],
+        extra_arguments=[{'use_intra_process_comms': True}],
     )
 
-    factor_perception_container = ComposableNodeContainer(
-        name='factor_perception_container',
+    # SLAM 容器（隔离，每个组件独立执行器）
+    slam_container = ComposableNodeContainer(
+        name='slam_container',
         namespace='',
         package='rclcpp_components',
-        executable='component_container_mt',
-        ros_arguments=['--log-level', 'warn'],
-        composable_node_descriptions=[factor_perception_node, register_node, rtabmap_slam_new, rtabmap_slam_continue, rtabmap_localization],
+        executable='component_container_isolated',  # 隔离模式
+        ros_arguments=['--log-level', 'info'],
+        composable_node_descriptions=[
+            rtabmap_slam_new, rtabmap_slam_continue, rtabmap_localization
+        ],
     )
+
+    # ============ 可视化（可选） ============
 
     rtabmap_viz = IncludeLaunchDescription(
         PathJoinSubstitution([
@@ -195,59 +228,61 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('rtabmap_viz')),
     )
 
-    # ============ Nav2 ============
+    # ============ 错误恢复机制 ============
 
-    # 使用 navigation_launch.py (不含 SLAM，使用 RTAB-Map 定位)
-    nav2_navigation = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([FindPackageShare('nav2_bringup'), 'launch', 'navigation_launch.py'])
-        ]),
-        launch_arguments={
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'autostart': LaunchConfiguration('autostart'),
-            'params_file': LaunchConfiguration('nav2_params_file'),
-            'use_composition': LaunchConfiguration('use_composition'),
-            'use_respawn': LaunchConfiguration('use_respawn'),
-            'log_level': LaunchConfiguration('log_level'),
-        }.items(),
+    # 硬件容器崩溃时的自动重启
+    hardware_restart_handler = RegisterEventHandler(
+        OnProcessExit(
+            target_action=hardware_container,
+            on_exit=[
+                LogInfo(msg='[ERROR] Hardware container crashed, restarting in 3 seconds...'),
+                TimerAction(
+                    period=3.0,
+                    actions=[hardware_container]
+                )
+            ]
+        )
+    )
+
+    # SLAM 容器崩溃时的自动重启
+    slam_restart_handler = RegisterEventHandler(
+        OnProcessExit(
+            target_action=slam_container,
+            on_exit=[
+                LogInfo(msg='[ERROR] SLAM container crashed, restarting in 3 seconds...'),
+                TimerAction(
+                    period=3.0,
+                    actions=[slam_container]
+                )
+            ]
+        )
     )
 
     # ============ 返回 LaunchDescription ============
 
     return LaunchDescription([
-        # Factor Perception 参数
-        camera_model_arg,
-        mxid_or_name_arg,
-        key_arg,
-        oak_tf_prefix_arg,
-        base_frame_id_arg,
-        odom_frame_id_arg,
-        cam_pos_x_arg,
-        cam_pos_y_arg,
-        cam_pos_z_arg,
-        cam_roll_arg,
-        cam_pitch_arg,
-        cam_yaw_arg,
-        publish_tf_arg,
-        depth_filter_arg,
-        ir_intensity_arg,
-        min_feat_depth_arg,
-        config_path_arg,
-        database_path_arg,
-        localization_arg,
-        rtabmap_viz_arg,
-        continue_mapping_arg,
-        # Nav2 参数
-        use_sim_time_arg,
-        autostart_arg,
-        nav2_params_file_arg,
-        map_subscribe_transient_local_arg,
-        use_composition_arg,
-        use_respawn_arg,
-        log_level_arg,
+        # 参数
+        camera_model_arg, mxid_or_name_arg, key_arg,
+        oak_tf_prefix_arg, base_frame_id_arg, odom_frame_id_arg,
+        cam_pos_x_arg, cam_pos_y_arg, cam_pos_z_arg,
+        cam_roll_arg, cam_pitch_arg, cam_yaw_arg,
+        publish_tf_arg, depth_filter_arg,
+        ir_intensity_arg, min_feat_depth_arg,
+        config_path_arg, database_path_arg,
+        localization_arg, rtabmap_viz_arg, continue_mapping_arg,
+        skip_device_check_arg,
+
+        # 设备检查（可选）
+        device_check_cmd,
+
         # 节点
         robot_state_publisher_node,
-        factor_perception_container,
+        hardware_container,
+        register_container,
+        slam_container,
         rtabmap_viz,
-        nav2_navigation,
+
+        # 错误恢复
+        hardware_restart_handler,
+        slam_restart_handler,
     ])

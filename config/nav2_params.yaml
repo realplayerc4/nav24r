@@ -128,8 +128,10 @@ local_costmap:
       publish_frequency: 2.0
       filter_threshold: 0.1
 
-      # 机器人 footprint (圆形，半径0.5m)
-      footprint: "[[0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5]]"
+      # 机器人 footprint (圆形半径0.5m)
+      # 方形: "[[0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5]]"
+      # 圆形更简单，适合人形机器人
+      footprint: "0.5"
 
       plugins: ["obstacle_layer", "inflation_layer"]
 

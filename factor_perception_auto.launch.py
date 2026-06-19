@@ -24,10 +24,15 @@ def generate_launch_description():
     depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='true')  # 启用深度滤波
     ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.4')  # IR 补光
     min_feat_depth_arg = DeclareLaunchArgument('min_feat_depth', default_value='0.0')
-    config_path_arg = DeclareLaunchArgument('config_path', default_value=PathJoinSubstitution([FindPackageShare('factor_perception'), 'config', 'rtabmap.ini']))
+    config_path_arg = DeclareLaunchArgument('config_path', default_value='/home/yq/nav24r/config/rtabmap_custom.ini')
     database_path_arg = DeclareLaunchArgument('database_path', default_value='~/rtabmap.db')
     localization_arg = DeclareLaunchArgument('localization', default_value='false')
     rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='true')
+    # 续建模式: 传入字符串 'true' 来加载已有地图数据
+    # 注意: ROS2 launch 命令行会自动把 :=true 解析为 bool，
+    # 而 RTAB-Map 的 Mem/InitWMWithAllNodes 要求 string 类型，
+    # 所以这里用两个 SLAM 节点 + 条件选择来规避类型问题
+    continue_mapping_arg = DeclareLaunchArgument('continue_mapping', default_value='false')
 
     robot_description_content = Command([
         'xacro ',
@@ -79,11 +84,16 @@ def generate_launch_description():
         parameters = [{'fill_upsampling_holes': True}],
     )
 
-    rtabmap_slam = ComposableNode(
+    # SLAM 建图 - 新建地图（从空地图开始）
+    rtabmap_slam_new = ComposableNode(
         package = 'rtabmap_slam',
         plugin = 'rtabmap_slam::CoreWrapper',
+        name = 'rtabmap',
         namespace = 'factor_perception',
-        condition = UnlessCondition(LaunchConfiguration('localization')),
+        condition = IfCondition(PythonExpression([
+            "'", LaunchConfiguration('localization'), "' == 'false' and '",
+            LaunchConfiguration('continue_mapping'), "' == 'false'"
+        ])),
         parameters = [{
             'subscribe_rgb': False,
             'subscribe_depth': False,
@@ -94,8 +104,38 @@ def generate_launch_description():
             'config_path': LaunchConfiguration('config_path'),
             'database_path': LaunchConfiguration('database_path'),
             'Mem/IncrementalMemory': 'true',
-            'Mem/InitWMWithAllNodes': 'false',
+            'Mem/InitWMWithAllNodes': 'false',   # 新建: 不加载旧节点
             'Grid/3D': 'true',
+            # 关键参数覆盖（优先级高于 ini）
+            'RGBD/ProximityBySpace': 'true',
+            'RGBD/ProximityByTime': 'true',
+        }],
+    )
+
+    # SLAM 建图 - 续建地图（加载已有地图数据）
+    rtabmap_slam_continue = ComposableNode(
+        package = 'rtabmap_slam',
+        plugin = 'rtabmap_slam::CoreWrapper',
+        name = 'rtabmap',
+        namespace = 'factor_perception',
+        condition = IfCondition(PythonExpression([
+            "'", LaunchConfiguration('localization'), "' == 'false' and '",
+            LaunchConfiguration('continue_mapping'), "' != 'false'"
+        ])),
+        parameters = [{
+            'subscribe_rgb': False,
+            'subscribe_depth': False,
+            'subscribe_rgbd': True,
+            'frame_id': LaunchConfiguration('base_frame_id'),
+            'odom_frame_id_init': LaunchConfiguration('odom_frame_id'),
+            'sync_queue_size': 50,
+            'config_path': LaunchConfiguration('config_path'),
+            'database_path': LaunchConfiguration('database_path'),
+            'Mem/IncrementalMemory': 'true',
+            'Mem/InitWMWithAllNodes': 'true',    # 续建: 加载所有已有节点
+            'Grid/3D': 'true',
+            'RGBD/ProximityBySpace': 'true',
+            'RGBD/ProximityByTime': 'true',
         }],
     )
 
@@ -125,7 +165,7 @@ def generate_launch_description():
         package = 'rclcpp_components',
         executable = 'component_container_mt',
         ros_arguments = ['--log-level', 'info'],  # 改为 info 以查看组件加载信息
-        composable_node_descriptions = [factor_perception_node, register_node, rtabmap_slam, rtabmap_localization],
+        composable_node_descriptions = [factor_perception_node, register_node, rtabmap_slam_new, rtabmap_slam_continue, rtabmap_localization],
     )
 
     rtabmap_viz = IncludeLaunchDescription(
@@ -146,6 +186,6 @@ def generate_launch_description():
         publish_tf_arg, depth_filter_arg,
         ir_intensity_arg, min_feat_depth_arg,
         config_path_arg, database_path_arg,
-        localization_arg, rtabmap_viz_arg,
+        localization_arg, rtabmap_viz_arg, continue_mapping_arg,
         robot_state_publisher_node, factor_perception_container, rtabmap_viz,
     ])
