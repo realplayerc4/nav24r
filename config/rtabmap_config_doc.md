@@ -6,6 +6,7 @@
 |------|------|------|
 | v2.1 | 2026-06-18 | 基于Factor Perception SDK默认配置 + 3D避障 |
 | v2.2 | 2026-06-18 | 添加ROS2工程分析、设备检测、控制面板更新 |
+| v2.3 | 2026-06-21 | 修复W3-W10配置Warning问题 |
 
 ---
 
@@ -82,6 +83,18 @@
 | `Grid\3D` | false | **true** | 启用3D点云地图（3D避障需要） |
 | `Grid\MaxObstacleHeight` | 1.0m | **1.5m** | 适配机器人最高点1.4m |
 | `GridGlobal\FootprintRadius` | 0.0 | **0.5m** | 设置机器人轮廓半径 |
+| `Grid\FootprintHeight` | 0.0 | **1.4m** | 机器人3D轮廓高度（RayTracing剔除机器人点云） |
+| `Grid\FootprintLength` | 0.0 | **0.5m** | 机器人3D轮廓长度 |
+| `Grid\FootprintWidth` | 0.0 | **0.5m** | 机器人3D轮廓宽度 |
+| `Grid\MaxGroundHeight` | 0.0 | **0.05m** | 地面检测上限（避免低矮障碍物误判为地面） |
+| `Grid\MinGroundHeight` | 0.0 | **-0.05m** | 地面检测下限（容差范围） |
+| `Mem\InitWMWithAllNodes` | true | **false** | 新建地图不加载旧节点，续建/定位模式在launch中显式覆盖 |
+| `Optimizer\Robust` | false | **true** | 启用鲁棒核函数，防止错误回环闭合影响全图 |
+| `RGBD\OptimizeMaxError` | 3.0 | **1.0** | 室内场景更严格的优化误差阈值 |
+| `RGBD\ForceOdom3DoF` | false | **true** | 2D平面运动机器人强制3DoF里程计 |
+| `Reg\Force3DoF` | false | **true** | 与ForceOdom3DoF保持一致，避免约束类型不匹配 |
+| `DbSqlite3\Synchronous` | 0 | **1** | NORMAL模式写入，防止断电数据丢失 |
+| `Rtabmap\WorkingDirectory` | (硬编码) | **~/.ros** | 避免硬编码用户路径 |
 
 ---
 
