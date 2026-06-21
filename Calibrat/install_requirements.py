@@ -1,198 +1,114 @@
 #!/usr/bin/env python3
+"""
+nav24r 依赖安装脚本
+
+安装 nav24r 项目所需的 Python 依赖包。
+适用于 ROS2 Jazzy + Ubuntu 24.04 环境。
+
+用法:
+    python3 install_requirements.py              # 安装所有依赖
+    python3 install_requirements.py --dry_run    # 仅打印命令，不执行
+    python3 install_requirements.py --skip_opencv  # 跳过 OpenCV 安装
+"""
+
 import platform
-import sys, os, subprocess
+import sys
+import subprocess
 import argparse
-import re
-import platform
-
-convert_default = "empty"
-parser = argparse.ArgumentParser()
-parser.add_argument('-sdai', "--skip_depthai", action="store_true", help="Skip installation of depthai library.")
-parser.add_argument('-dr', "--dry_run", action="store_true", help="Print commands without executing.")
-parser.add_argument("--convert", nargs="?", default=convert_default, help="Convert the NN blobs using BlobConverter. Can be used as --convert 2021.4 to convert using OpenVINO 2021.4 or just --convert to use latest OpenVINO release")
-parser.add_argument('-irr', "--install_rerun", action="store_true", help="Install rerun library.")
-parser.add_argument('-io3dcpu', "--install_open3d_cpu", action="store_true", help="Install open3d with CPU support.")
-
-def prettyPrint(command):
-
-    def hasWhitespace(string):
-        return (len(string) != len(re.sub(r'\s+', '', string)))
-
-    stringBuilder = str()
-    for i, item in enumerate(command):
-        if(hasWhitespace(item)):
-            stringBuilder += ' "' + item + '"'
-        else:
-            if i == 0:
-                prefix = ''
-            else:
-                prefix = ' '
-            stringBuilder += prefix + item
-    print(stringBuilder)
 
 
-args = parser.parse_args()
-
-examples_dir = os.path.dirname(os.path.abspath(__file__))
-
-parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) + "/bindings/python/"
-os.chdir(parent_dir)
-sys.path.insert(1, parent_dir)
-import find_version
-
-# 3rdparty dependencies to install
-DEPENDENCIES = ['pyyaml', 'requests']
-requireOpenCv = True
-thisPlatform = platform.machine()
-if thisPlatform == "aarch64":
-    # try to import opencv, numpy in a subprocess, since it might fail with illegal instruction
-    # if it was previously installed w/ pip without setting OPENBLAS_CORE_TYPE=ARMV8 env variable
+def run_command(cmd, dry_run=False):
+    """执行或打印命令"""
+    if dry_run:
+        print(f"  [DRY RUN] {' '.join(cmd)}")
+        return True
     try:
-        subprocess.check_call([sys.executable, "-c", "import numpy, cv2;"])
-        requireOpenCv = False
-    except subprocess.CalledProcessError as ex:
-        requireOpenCv = True
+        subprocess.check_call(cmd)
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"  [ERROR] 命令执行失败: {e}")
+        return False
 
-if requireOpenCv:
-    DEPENDENCIES.append('numpy<3.0')
-    # 4.5.4.58 package is broken for python 3.9
-    if sys.version_info[0] == 3 and sys.version_info[1] == 9:
-        DEPENDENCIES.append('opencv-python!=4.5.4.58')
-    else:
-        DEPENDENCIES.append('opencv-python')
 
-if args.install_rerun:
-    DEPENDENCIES.append('rerun-sdk')
-if args.install_open3d_cpu:
-    if platform.system() == "Darwin":
-        DEPENDENCIES.append("open3d")
-    else:
-        DEPENDENCIES.append("open3d-cpu")
-# Constants
-ARTIFACTORY_URL = 'https://artifacts.luxonis.com/artifactory/luxonis-python-snapshot-local'
+def main():
+    parser = argparse.ArgumentParser(description="nav24r 依赖安装脚本")
+    parser.add_argument("--dry_run", action="store_true", help="仅打印命令，不执行")
+    parser.add_argument("--skip_opencv", action="store_true", help="跳过 OpenCV 安装")
+    parser.add_argument("--user", action="store_true", help="使用 --user 模式安装")
+    args = parser.parse_args()
 
-# Check if in virtual environment
-in_venv = getattr(sys, "real_prefix", getattr(sys, "base_prefix", sys.prefix)) != sys.prefix
-pip_call = [sys.executable, "-m", "pip"]
-pip_installed = True
-pip_install = pip_call + ["install", "-U"]
-pip_package_install = pip_install + ["--prefer-binary"]
+    # 检查 Python 版本
+    if sys.version_info[0] != 3:
+        print(f"[ERROR] 需要 Python 3，当前检测到: Python {sys.version_info[0]}")
+        sys.exit(1)
 
-try:
-    subprocess.check_call(pip_call + ["--version"])
-except subprocess.CalledProcessError as ex:
-    pip_installed = False
+    if sys.version_info[1] < 10:
+        print(f"[WARNING] 推荐使用 Python 3.10+，当前: Python {sys.version_info[0]}.{sys.version_info[1]}")
 
-if not pip_installed:
-    err_str = "Issues with \"pip\" package detected! Follow the official instructions to install - https://pip.pypa.io/en/stable/installation/"
-    raise RuntimeError(err_str)
-
-if sys.version_info[0] != 3:
-    raise RuntimeError("Examples require Python 3 to run (detected: Python {})".format(sys.version_info[0]))
-
-is_pi = thisPlatform.startswith("arm")
-prebuiltWheelsPythonVersion = [7,9]
-if requireOpenCv and is_pi and sys.version_info[1] not in prebuiltWheelsPythonVersion:
-    print("[WARNING] There are no prebuilt wheels for Python 3.{} for OpenCV, building process on this device may be long and unstable".format(sys.version_info[1]))
-
-if not in_venv:
-    pip_install.append("--user")
-    pip_package_install.append("--user")
-
-# Update pip
-pip_update_cmd = [*pip_install, "pip"]
-if args.dry_run:
-    prettyPrint(pip_update_cmd)
-else:
-    subprocess.check_call(pip_update_cmd)
-# Install python dependencies
-python_dependencies_cmd = [*pip_package_install, *DEPENDENCIES]
-if args.dry_run:
-    prettyPrint(python_dependencies_cmd)
-else:
-    subprocess.check_call(python_dependencies_cmd)
-
-if not args.skip_depthai:
-    # Check if in git context and retrieve some information
-    git_context = True
-    git_commit = ""
-    git_branch = ""
+    # 检查 pip
+    pip_call = [sys.executable, "-m", "pip"]
     try:
-        git_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('UTF-8').strip()
-        git_branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).decode('UTF-8').strip()
-    except (OSError, subprocess.CalledProcessError) as e:
-        git_context = False
+        subprocess.check_call(pip_call + ["--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        print("[ERROR] pip 未安装或不可用，请先安装 pip")
+        sys.exit(1)
 
-    # Install depthai depending on context
-    if not git_context or git_branch == 'main':
-        # Install latest pypi depthai release
-        depthai_install_cmd = [*pip_package_install, '-U', '--force-reinstall', '--pre', 'depthai']
-        if args.dry_run:
-            prettyPrint(depthai_install_cmd)
-        else:
-            subprocess.check_call(depthai_install_cmd)
-
-    elif git_context:
-        try:
-            subprocess.check_output(['git', 'submodule', 'update', '--init', '--recursive'])
-        except (OSError, subprocess.CalledProcessError) as e:
-            print("git submodule update failed!")
-            raise
-        # Get package version if in git context
-        final_version = find_version.get_package_dev_version(git_commit)
-        # Install latest built wheels from artifactory (0.0.0.0+[hash] or [version]+[hash])
-        commands = [[*pip_package_install, "--extra-index-url", ARTIFACTORY_URL, "depthai=="+final_version],
-                    [*pip_package_install, "."]]
-        success = False
-        for command in commands:
-            try:
-                if args.dry_run:
-                    prettyPrint(command)
-                    success = True
-                else:
-                    success = subprocess.call(command) == 0
-            except (OSError, subprocess.CalledProcessError) as e:
-                success = False
-            if success:
-                break
-
-        # If all commands failed
-        if not success:
-            print("Couldn't install dependencies as wheels and trying to compile from sources failed")
-            print("Check https://github.com/luxonis/depthai-python#dependencies on retrieving dependencies for compiling from sources")
-
-downloader_cmd = [sys.executable, f"{examples_dir}/downloader/downloader.py", "--all", "--cache_dir", f"{examples_dir}/downloader/", "--num_attempts", "5", "-o", f"{examples_dir}/models"]
-if args.dry_run:
-    prettyPrint(downloader_cmd)
-else:
-    subprocess.check_call(downloader_cmd)
-
-if args.convert != convert_default:
-    nn_models_shaves = {
-        "mobilenet-ssd": [5, 6, 8],
-        "person-detection-retail-0013": [7],
-        "yolo-v4-tiny-tf": [6],
-        "yolo-v3-tiny-tf": [6],
-    }
-    blobconverter_cmds = [
-        [sys.executable, "-m", "blobconverter", "-zn", nn_name, "-sh", str(nn_shave), "-o", f"{examples_dir}/models", *(["-v", args.convert] if args.convert is not None else [])]
-        for nn_name in nn_models_shaves
-        for nn_shave in nn_models_shaves[nn_name]
+    # 构建依赖列表
+    dependencies = [
+        'pyyaml',
+        'requests',
+        'numpy',
     ]
-    install_blobconverter_cmd = [*pip_package_install, "blobconverter"]
-    for cmd in [install_blobconverter_cmd] + blobconverter_cmds:
-        if args.dry_run:
-            prettyPrint(cmd)
-        else:
-            subprocess.check_call(cmd)
 
-if requireOpenCv and thisPlatform == "aarch64":
-    from os import environ
-    OPENBLAS_CORE_TYPE = environ.get('OPENBLAS_CORE_TYPE')
-    if OPENBLAS_CORE_TYPE != 'ARMV8':
-        WARNING='\033[1;5;31m'
-        RED='\033[91m'
-        LINE_CL='\033[0m'
-        SUGGESTION='echo "export OPENBLAS_CORETYPE=ARMV8" >> ~/.bashrc && source ~/.bashrc'
-        print(f'{WARNING}WARNING:{LINE_CL} Need to set OPENBLAS_CORE_TYPE environment variable, otherwise opencv will fail with illegal instruction.')
-        print(f'Run: {RED}{SUGGESTION}{LINE_CL}')
+    if not args.skip_opencv:
+        # aarch64 平台可能需要特殊处理
+        if platform.machine() == "aarch64":
+            try:
+                subprocess.check_call(
+                    [sys.executable, "-c", "import numpy, cv2;"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                print("[INFO] OpenCV 已安装，跳过")
+            except subprocess.CalledProcessError:
+                dependencies.append('opencv-python')
+        else:
+            dependencies.append('opencv-python')
+
+    # 构建安装命令
+    pip_install = pip_call + ["install", "-U"]
+    if args.user:
+        pip_install.append("--user")
+    pip_install.append("--prefer-binary")
+
+    print("=" * 60)
+    print("nav24r 依赖安装")
+    print("=" * 60)
+    print(f"Python: {sys.version}")
+    print(f"Platform: {platform.system()} {platform.machine()}")
+    print(f"依赖列表: {', '.join(dependencies)}")
+    print("=" * 60)
+
+    # 更新 pip
+    print("\n[1/2] 更新 pip...")
+    run_command(pip_install + ["pip"], dry_run=args.dry_run)
+
+    # 安装依赖
+    print("\n[2/2] 安装 Python 依赖...")
+    success = run_command(pip_install + dependencies, dry_run=args.dry_run)
+
+    if success or args.dry_run:
+        print("\n[DONE] 依赖安装完成")
+    else:
+        print("\n[WARNING] 部分依赖安装失败，请检查错误信息")
+
+    # aarch64 提示
+    if platform.machine() == "aarch64":
+        import os
+        openblas = os.environ.get('OPENBLAS_CORE_TYPE')
+        if openblas != 'ARMV8':
+            print("\n[WARNING] 建议设置 OPENBLAS_CORE_TYPE=ARMV8 以避免 OpenCV 非法指令错误")
+            print("  运行: echo 'export OPENBLAS_CORETYPE=ARMV8' >> ~/.bashrc && source ~/.bashrc")
+
+
+if __name__ == "__main__":
+    main()

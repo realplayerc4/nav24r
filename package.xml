@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>nav24r</name>
+  <version>2.0.0</version>
+  <description>NAV24R - 人形机器人导航系统，集成 Factor Perception SDK、RTAB-Map SLAM 和 Nav2 导航栈</description>
+  <maintainer email="nav24r-maintainer@users.noreply.github.com">NAV24R Team</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <!-- Core ROS2 dependencies -->
+  <depend>rclpy</depend>
+  <depend>nav2_msgs</depend>
+  <depend>nav2_simple_commander</depend>
+  <depend>rtabmap_ros</depend>
+  <depend>rtabmap_viz</depend>
+  <depend>tf2_ros</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>lifecycle_msgs</depend>
+
+  <!-- Python runtime dependencies -->
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-tk</exec_depend>
+
+  <!-- Launch dependencies -->
+  <exec_depend>ros2launch</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
