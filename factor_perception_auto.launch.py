@@ -1,6 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.conditions import IfCondition, UnlessCondition
+from launch.conditions import IfCondition
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
@@ -24,7 +24,11 @@ def generate_launch_description():
     depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='true')  # 启用深度滤波
     ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.4')  # IR 补光
     min_feat_depth_arg = DeclareLaunchArgument('min_feat_depth', default_value='0.0')
-    config_path_arg = DeclareLaunchArgument('config_path', default_value='/home/yq/nav24r/config/rtabmap_custom.ini')
+    config_path_arg = DeclareLaunchArgument('config_path',
+        default_value=PathJoinSubstitution([
+            FindPackageShare('nav24r'),
+            'config', 'rtabmap_custom.ini'
+        ]))
     database_path_arg = DeclareLaunchArgument('database_path', default_value='~/rtabmap.db')
     localization_arg = DeclareLaunchArgument('localization', default_value='false')
     rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='true')
@@ -71,6 +75,7 @@ def generate_launch_description():
             'min_feat_depth': LaunchConfiguration('min_feat_depth'),
             'blob_path': PathJoinSubstitution([FindPackageShare('factor_perception'), 'blobs', 'HF-Net.blob']),
         }],
+        extra_arguments=[{'use_intra_process_comms': True}],  # 零拷贝优化
     )
 
     register_node = ComposableNode(
@@ -82,6 +87,7 @@ def generate_launch_description():
             "'", LaunchConfiguration('camera_model'), "' != 'OAK-D-LR' and '", LaunchConfiguration('camera_model'), "' != 'OAK-D-SR'"
         ])),
         parameters = [{'fill_upsampling_holes': True}],
+        extra_arguments=[{'use_intra_process_comms': True}],
     )
 
     # SLAM 建图 - 新建地图（从空地图开始）
@@ -110,6 +116,7 @@ def generate_launch_description():
             'RGBD/ProximityBySpace': 'true',
             'RGBD/ProximityByTime': 'true',
         }],
+        extra_arguments=[{'use_intra_process_comms': True}],
     )
 
     # SLAM 建图 - 续建地图（加载已有地图数据）
@@ -137,11 +144,13 @@ def generate_launch_description():
             'RGBD/ProximityBySpace': 'true',
             'RGBD/ProximityByTime': 'true',
         }],
+        extra_arguments=[{'use_intra_process_comms': True}],
     )
 
     rtabmap_localization = ComposableNode(
         package = 'rtabmap_slam',
         plugin = 'rtabmap_slam::CoreWrapper',
+        name = 'rtabmap',
         namespace = 'factor_perception',
         condition = IfCondition(LaunchConfiguration('localization')),
         parameters = [{
@@ -156,7 +165,10 @@ def generate_launch_description():
             'Mem/IncrementalMemory': 'false',
             'Mem/InitWMWithAllNodes': 'true',
             'Grid/3D': 'true',
+            'RGBD/ProximityBySpace': 'true',
+            'RGBD/ProximityByTime': 'true',
         }],
+        extra_arguments=[{'use_intra_process_comms': True}],
     )
 
     factor_perception_container = ComposableNodeContainer(
@@ -164,7 +176,7 @@ def generate_launch_description():
         namespace = '',
         package = 'rclcpp_components',
         executable = 'component_container_mt',
-        ros_arguments = ['--log-level', 'info'],  # 改为 info 以查看组件加载信息
+        ros_arguments = ['--log-level', 'warn'],  # 与 full 保持一致
         composable_node_descriptions = [factor_perception_node, register_node, rtabmap_slam_new, rtabmap_slam_continue, rtabmap_localization],
     )
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Factor Perception 控制面板
-带设备检测和相机重启功能
+带设备检测、相机重启、地图管理、启动文件选择功能
 """
 
 import tkinter as tk
@@ -24,17 +24,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 class FactorControlPanel:
     def __init__(self, root):
         self.root = root
         self.root.title("Factor Perception 控制面板")
-        self.root.geometry("650x600")
+        self.root.geometry("700x720")
 
         # 加载配置
         self.load_app_config()
 
-        # 续建模式标记
-        self.is_continue = False
+        # 运行模式: 'new' 新建, 'continue' 续建, 'localization' 定位
+        self.run_mode = 'new'
+        # 启动文件: 'auto' 或 'isolated'
+        self.launch_file = 'auto'
 
         # 设备状态
         self.device_connected = False
@@ -89,7 +92,7 @@ class FactorControlPanel:
                 font=('Arial', 16, 'bold'), fg='#00ff88', bg='#2b2b2b').pack(pady=10)
         self.root.configure(bg='#2b2b2b')
 
-        # === 设备状态区域（新增） ===
+        # === 设备状态区域 ===
         device_frame = tk.LabelFrame(self.root, text="📷 OAK-D 设备状态", font=('Arial', 11), padx=10, pady=10)
         device_frame.pack(fill=tk.X, padx=20, pady=5)
 
@@ -123,47 +126,100 @@ class FactorControlPanel:
                       command=self.toggle_auto_check, bg='#2b2b2b', fg='white',
                       selectcolor='#2b2b2b', activebackground='#2b2b2b').pack(side=tk.RIGHT, padx=5)
 
+        # === 运行模式选择 ===
+        mode_frame = tk.LabelFrame(self.root, text="🎯 运行模式", font=('Arial', 11), padx=10, pady=10)
+        mode_frame.pack(fill=tk.X, padx=20, pady=5)
+
+        self.mode_var = tk.StringVar(value='new')
+
+        mode_row = tk.Frame(mode_frame)
+        mode_row.pack(fill=tk.X, pady=3)
+
+        modes = [
+            ("🆕 新建地图", 'new', "从零开始新建 SLAM 地图"),
+            ("🔄 续建地图", 'continue', "在已有地图基础上继续建图"),
+            ("🧭 定位导航", 'localization', "使用已有地图进行定位"),
+        ]
+
+        for text, value, tip in modes:
+            rb = tk.Radiobutton(mode_row, text=text, variable=self.mode_var, value=value,
+                               command=self.on_mode_changed, font=('Arial', 10),
+                               bg='#2b2b2b', fg='white', selectcolor='#3d5a80',
+                               activebackground='#2b2b2b', activeforeground='white')
+            rb.pack(side=tk.LEFT, padx=10)
+
+        # 启动文件选择
+        launch_row = tk.Frame(mode_frame)
+        launch_row.pack(fill=tk.X, pady=3)
+
+        tk.Label(launch_row, text="启动架构:", font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 5))
+
+        self.launch_var = tk.StringVar(value='auto')
+        launch_modes = [
+            ("Auto（单容器）", 'auto', "所有组件在同一容器，适合开发调试"),
+            ("Isolated（隔离容器）", 'isolated', "组件独立容器，适合生产环境"),
+        ]
+
+        for text, value, tip in launch_modes:
+            rb = tk.Radiobutton(launch_row, text=text, variable=self.launch_var, value=value,
+                               command=self.on_launch_changed, font=('Arial', 10),
+                               bg='#2b2b2b', fg='white', selectcolor='#3d5a80',
+                               activebackground='#2b2b2b', activeforeground='white')
+            rb.pack(side=tk.LEFT, padx=10)
+
         # === 地图管理 ===
-        map_frame = tk.LabelFrame(self.root, text="地图管理", font=('Arial', 11), padx=10, pady=10)
+        map_frame = tk.LabelFrame(self.root, text="🗺️ 地图管理", font=('Arial', 11), padx=10, pady=10)
         map_frame.pack(fill=tk.X, padx=20, pady=5)
 
-        # 地图ID
+        # 地图ID（新建时使用）
         row1 = tk.Frame(map_frame)
         row1.pack(fill=tk.X, pady=3)
-        tk.Label(row1, text="地图ID:").pack(side=tk.LEFT)
-        self.map_id_entry = tk.Entry(row1, width=20)
+        tk.Label(row1, text="地图名称:", font=('Arial', 10)).pack(side=tk.LEFT)
+        self.map_id_entry = tk.Entry(row1, width=20, font=('Arial', 10))
         self.map_id_entry.pack(side=tk.LEFT, padx=10)
         self.map_id_entry.insert(0, f"map_{datetime.now().strftime('%Y%m%d_%H%M')}")
-        tk.Button(row1, text="新建地图", command=self.new_map, bg='#4a7c59', fg='white').pack(side=tk.LEFT, padx=5)
 
-        # 地图选择
+        # 已有地图选择（续建/定位时使用）
         row2 = tk.Frame(map_frame)
         row2.pack(fill=tk.X, pady=3)
-        tk.Label(row2, text="已有地图:").pack(side=tk.LEFT)
+        tk.Label(row2, text="已有地图:", font=('Arial', 10)).pack(side=tk.LEFT)
         self.map_combo = ttk.Combobox(row2, width=25)
         self.map_combo.pack(side=tk.LEFT, padx=10)
-        tk.Button(row2, text="刷新", command=self.refresh_maps, bg='#3d5a80', fg='white').pack(side=tk.LEFT, padx=2)
-        tk.Button(row2, text="续建", command=self.continue_map, bg='#e07c24', fg='white').pack(side=tk.LEFT, padx=2)
-        tk.Button(row2, text="删除", command=self.delete_map, bg='#e63946', fg='white').pack(side=tk.LEFT, padx=2)
+        self.map_combo.bind('<<ComboboxSelected>>', self.on_map_selected)
+        tk.Button(row2, text="🔄 刷新", command=self.refresh_maps, bg='#3d5a80', fg='white',
+                 font=('Arial', 9)).pack(side=tk.LEFT, padx=2)
+        tk.Button(row2, text="🗑️ 删除", command=self.delete_map, bg='#e63946', fg='white',
+                 font=('Arial', 9)).pack(side=tk.LEFT, padx=2)
 
-        # 新增：查看地图按钮和导出功能
+        # 地图工具
         row_map = tk.Frame(map_frame)
         row_map.pack(fill=tk.X, pady=3)
-        tk.Button(row_map, text="👁️ 查看地图", width=14, height=1, command=self.view_map_only, bg='#9b59b6', fg='white').pack(side=tk.LEFT, padx=3)
-        tk.Button(row_map, text="📊 解读地图质量", width=14, height=1, command=self.analyze_map_quality, bg='#e67e22', fg='white').pack(side=tk.LEFT, padx=3)
-        tk.Button(row_map, text="🗺️ 导出Octomap", width=14, height=1, command=self.export_octomap, bg='#16a085', fg='white').pack(side=tk.LEFT, padx=3)
+        tk.Button(row_map, text="👁️ 查看地图", width=12, height=1, command=self.view_map_only, bg='#9b59b6', fg='white').pack(side=tk.LEFT, padx=3)
+        tk.Button(row_map, text="📊 解读质量", width=12, height=1, command=self.analyze_map_quality, bg='#e67e22', fg='white').pack(side=tk.LEFT, padx=3)
+        tk.Button(row_map, text="🗺️ 导出Octomap", width=12, height=1, command=self.export_octomap, bg='#16a085', fg='white').pack(side=tk.LEFT, padx=3)
 
         self.refresh_maps()
 
-        # 功能按钮
-        btn_frame = tk.LabelFrame(self.root, text="功能", font=('Arial', 11), padx=10, pady=10)
+        # === 功能按钮 ===
+        btn_frame = tk.LabelFrame(self.root, text="⚙️ 功能", font=('Arial', 11), padx=10, pady=10)
         btn_frame.pack(fill=tk.X, padx=20, pady=5)
 
         btn_row1 = tk.Frame(btn_frame)
         btn_row1.pack(pady=5)
-        tk.Button(btn_row1, text="🗺️ 开始建图", width=14, height=2, command=self.start_mapping, bg='#3d5a80', fg='white').pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_row1, text="🧭 开始导航", width=14, height=2, command=self.start_navigation, bg='#3d5a80', fg='white').pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_row1, text="🚀 完整导航", width=14, height=2, command=self.start_full_nav, bg='#3d5a80', fg='white').pack(side=tk.LEFT, padx=5)
+
+        # 主操作按钮（根据模式变化）
+        self.main_action_btn = tk.Button(btn_row1, text="🆕 开始建图", width=14, height=2,
+                                         command=self.start_main_action, bg='#3d5a80', fg='white',
+                                         font=('Arial', 10, 'bold'))
+        self.main_action_btn.pack(side=tk.LEFT, padx=5)
+
+        tk.Button(btn_row1, text="🚀 完整导航", width=14, height=2,
+                 command=self.start_full_nav, bg='#3d5a80', fg='white',
+                 font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(btn_row1, text="⏹️ 停止", width=14, height=2,
+                 command=self.stop_all, bg='#e63946', fg='white',
+                 font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=5)
 
         btn_row2 = tk.Frame(btn_frame)
         btn_row2.pack(pady=5)
@@ -174,18 +230,71 @@ class FactorControlPanel:
         btn_row3 = tk.Frame(btn_frame)
         btn_row3.pack(pady=5)
         tk.Button(btn_row3, text="📁 数据库", width=14, height=2, command=self.view_database, bg='#4a7c59', fg='white').pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_row3, text="⏹️ 停止", width=14, height=2, command=self.stop_all, bg='#e63946', fg='white').pack(side=tk.LEFT, padx=5)
 
-        # 状态
+        # === 状态栏 ===
         self.status_var = tk.StringVar(value="状态: 就绪")
-        tk.Label(self.root, textvariable=self.status_var, fg='#00ff88', bg='#2b2b2b', font=('Arial', 10)).pack(pady=10)
+        tk.Label(self.root, textvariable=self.status_var, fg='#00ff88', bg='#2b2b2b', font=('Arial', 10)).pack(pady=5)
 
-        # 续建模式指示
-        self.continue_var = tk.StringVar(value="")
-        tk.Label(self.root, textvariable=self.continue_var, fg='#e07c24', bg='#2b2b2b', font=('Arial', 9)).pack()
+        # 模式指示
+        self.mode_indicator_var = tk.StringVar(value="模式: 新建地图 | 架构: Auto")
+        tk.Label(self.root, textvariable=self.mode_indicator_var, fg='#4ecdc4', bg='#2b2b2b', font=('Arial', 9, 'bold')).pack()
 
         # 信息
         tk.Label(self.root, text="地图存储: ~/rtabmap_maps/<map_id>.db", fg='#888888', bg='#2b2b2b').pack()
+
+    def on_mode_changed(self):
+        """运行模式切换回调"""
+        self.run_mode = self.mode_var.get()
+        mode_labels = {
+            'new': ('🆕 开始建图', '新建地图'),
+            'continue': ('🔄 续建地图', '续建地图'),
+            'localization': ('🧭 开始定位', '定位导航'),
+        }
+        btn_text, mode_text = mode_labels.get(self.run_mode, ('开始', '未知'))
+        self.main_action_btn.config(text=btn_text)
+        self.update_mode_indicator()
+
+        # 续建或定位模式时，自动选择已有地图
+        if self.run_mode in ('continue', 'localization'):
+            name = self.get_map_name()
+            if name:
+                self.map_id_entry.delete(0, tk.END)
+                self.map_id_entry.insert(0, name)
+
+    def on_launch_changed(self):
+        """启动文件切换回调"""
+        self.launch_file = self.launch_var.get()
+        self.update_mode_indicator()
+
+    def on_map_selected(self, event=None):
+        """选择已有地图回调"""
+        name = self.get_map_name()
+        if name and self.run_mode in ('continue', 'localization'):
+            self.map_id_entry.delete(0, tk.END)
+            self.map_id_entry.insert(0, name)
+
+    def update_mode_indicator(self):
+        """更新底部模式指示器"""
+        mode_labels = {
+            'new': '新建地图',
+            'continue': '续建地图',
+            'localization': '定位导航',
+        }
+        launch_labels = {
+            'auto': 'Auto',
+            'isolated': 'Isolated',
+        }
+        mode_text = mode_labels.get(self.run_mode, '未知')
+        launch_text = launch_labels.get(self.launch_file, '未知')
+        self.mode_indicator_var.set(f"模式: {mode_text} | 架构: {launch_text}")
+
+    def get_launch_file_path(self):
+        """根据选择的架构返回对应的启动文件路径"""
+        project_root = self.app_config.get('paths', {}).get('project_root', '/home/yq/nav24r')
+        if self.launch_file == 'isolated':
+            return f"{project_root}/launch/factor_perception_isolated.launch.py"
+        else:
+            return f"{project_root}/factor_perception_auto.launch.py"
 
     def refresh_maps(self):
         if not os.path.exists(self.maps_dir):
@@ -216,33 +325,6 @@ class FactorControlPanel:
             return os.path.expanduser("~/rtabmap.db")
         return os.path.join(self.maps_dir, f"{name}.db")
 
-    def new_map(self):
-        map_id = self.map_id_entry.get().strip()
-        if not map_id:
-            messagebox.showerror("错误", "请输入地图ID")
-            return
-        db_path = self.get_db_path(map_id)
-        if os.path.exists(db_path):
-            if not messagebox.askyesno("地图已存在", f"地图 '{map_id}' 已存在，是否续建?"):
-                return
-        self.status_var.set(f"状态: 地图 '{map_id}' 已准备")
-
-    def continue_map(self):
-        name = self.get_map_name()
-        if not name:
-            messagebox.showerror("错误", "请选择地图")
-            return
-        db_path = self.get_db_path(name)
-        if not os.path.exists(db_path):
-            messagebox.showerror("错误", f"地图文件不存在: {db_path}")
-            return
-        self.map_id_entry.delete(0, tk.END)
-        self.map_id_entry.insert(0, name)
-        self.is_continue = True
-        self.continue_var.set("🔄 续建模式: 将加载已有地图数据继续建图")
-        self.status_var.set(f"状态: 续建 '{name}'")
-        logger.info(f"设置续建模式: {name}, 数据库: {db_path}")
-
     def delete_map(self):
         name = self.get_map_name()
         if not name:
@@ -258,45 +340,112 @@ class FactorControlPanel:
         self.refresh_maps()
         self.status_var.set(f"状态: 已删除 '{name}'")
 
-    def start_mapping(self):
-        """开始建图"""
-        # 先检查设备
+    def start_main_action(self):
+        """根据当前运行模式执行对应操作"""
+        if self.run_mode == 'new':
+            self.start_new_mapping()
+        elif self.run_mode == 'continue':
+            self.start_continue_mapping()
+        elif self.run_mode == 'localization':
+            self.start_localization()
+
+    def start_new_mapping(self):
+        """新建地图建图模式"""
         if not self.check_device_before_launch():
             return
 
         try:
             map_id = self.map_id_entry.get().strip()
             if not map_id:
-                messagebox.showerror("错误", "请输入地图ID")
+                messagebox.showerror("错误", "请输入地图名称")
                 return
             db_path = self.get_db_path(map_id)
             ros_setup = self.app_config['ros']['setup_path']
             camera_key = self.app_config['camera']['key']
-            project_root = self.app_config['paths']['project_root']
+            launch_path = self.get_launch_file_path()
 
-            # 判断是否为续建模式
-            if self.is_continue and os.path.exists(db_path):
-                # 续建：加载已有地图数据继续建图
-                cmd = f"bash -c 'source {ros_setup} && ros2 launch {project_root}/factor_perception_auto.launch.py localization:=false rtabmap_viz:=true database_path:={db_path} key:={camera_key} continue_mapping:=true'"
-                self.status_var.set(f"状态: 续建模式 | {map_id} (加载已有地图)")
-                logger.info(f"启动续建模式: {map_id}, 数据库: {db_path}")
-            else:
-                # 新建图
-                cmd = f"bash -c 'source {ros_setup} && ros2 launch {project_root}/factor_perception_auto.launch.py localization:=false rtabmap_viz:=true database_path:={db_path} key:={camera_key}'"
-                self.status_var.set(f"状态: 建图模式 | {map_id}")
-                logger.info(f"启动建图模式: {map_id}, 数据库: {db_path}")
+            # 新建地图: localization:=false, continue_mapping:=false
+            cmd = (f"bash -c 'source {ros_setup} && "
+                   f"ros2 launch {launch_path} "
+                   f"localization:=false rtabmap_viz:=true "
+                   f"database_path:={db_path} key:={camera_key}'")
 
+            logger.info(f"启动新建建图: {map_id}, 数据库: {db_path}, 架构: {self.launch_file}")
             subprocess.Popen(cmd, shell=True)
-            # 重置续建标记
-            self.is_continue = False
-            self.continue_var.set("")
+            self.status_var.set(f"状态: 新建建图 | {map_id} | {self.launch_file}")
+
         except Exception as e:
             logger.error(f"启动建图失败: {e}")
             messagebox.showerror("错误", f"启动建图失败: {str(e)}")
 
-    def start_navigation(self):
-        """开始导航"""
-        # 先检查设备
+    def start_continue_mapping(self):
+        """续建地图模式"""
+        if not self.check_device_before_launch():
+            return
+
+        try:
+            name = self.get_map_name()
+            if not name:
+                messagebox.showerror("错误", "请选择已有地图进行续建")
+                return
+            db_path = self.get_db_path(name)
+            if not os.path.exists(db_path):
+                messagebox.showerror("错误", f"地图文件不存在: {db_path}")
+                return
+
+            ros_setup = self.app_config['ros']['setup_path']
+            camera_key = self.app_config['camera']['key']
+            launch_path = self.get_launch_file_path()
+
+            # 续建: localization:=false, continue_mapping:=true
+            cmd = (f"bash -c 'source {ros_setup} && "
+                   f"ros2 launch {launch_path} "
+                   f"localization:=false rtabmap_viz:=true continue_mapping:=true "
+                   f"database_path:={db_path} key:={camera_key}'")
+
+            logger.info(f"启动续建模式: {name}, 数据库: {db_path}, 架构: {self.launch_file}")
+            subprocess.Popen(cmd, shell=True)
+            self.status_var.set(f"状态: 续建地图 | {name} | {self.launch_file}")
+
+        except Exception as e:
+            logger.error(f"启动续建失败: {e}")
+            messagebox.showerror("错误", f"启动续建失败: {str(e)}")
+
+    def start_localization(self):
+        """定位导航模式"""
+        if not self.check_device_before_launch():
+            return
+
+        try:
+            name = self.get_map_name()
+            if not name:
+                messagebox.showerror("错误", "请选择地图进行定位")
+                return
+            db_path = self.get_db_path(name)
+            if not os.path.exists(db_path):
+                messagebox.showerror("错误", f"地图文件不存在: {db_path}")
+                return
+
+            ros_setup = self.app_config['ros']['setup_path']
+            camera_key = self.app_config['camera']['key']
+            launch_path = self.get_launch_file_path()
+
+            # 定位: localization:=true
+            cmd = (f"bash -c 'source {ros_setup} && "
+                   f"ros2 launch {launch_path} "
+                   f"localization:=true rtabmap_viz:=true "
+                   f"database_path:={db_path} key:={camera_key}'")
+
+            logger.info(f"启动定位模式: {name}, 数据库: {db_path}, 架构: {self.launch_file}")
+            subprocess.Popen(cmd, shell=True)
+            self.status_var.set(f"状态: 定位导航 | {name} | {self.launch_file}")
+
+        except Exception as e:
+            logger.error(f"启动定位失败: {e}")
+            messagebox.showerror("错误", f"启动定位失败: {str(e)}")
+
+    def start_full_nav(self):
+        """启动完整导航（Factor Perception + Nav2）"""
         if not self.check_device_before_launch():
             return
 
@@ -306,56 +455,45 @@ class FactorControlPanel:
                 messagebox.showerror("错误", "请选择地图")
                 return
             db_path = self.get_db_path(name)
-            if not db_path:
-                messagebox.showerror("错误", "无法获取地图路径")
-                return
             if not os.path.exists(db_path):
                 messagebox.showerror("错误", f"地图文件不存在: {db_path}")
                 return
-            self.status_var.set(f"状态: 启动导航 {name}...")
+
             ros_setup = self.app_config['ros']['setup_path']
             camera_key = self.app_config['camera']['key']
-            cmd = f"bash -c 'source {ros_setup} && ros2 launch /home/yq/nav24r/factor_perception_auto.launch.py localization:=true rtabmap_viz:=true database_path:={db_path} key:={camera_key}'"
-            subprocess.Popen(cmd, shell=True)
-            self.status_var.set(f"状态: 导航模式 | {name}")
-            logger.info(f"启动导航模式: {name}, 数据库: {db_path}")
-        except Exception as e:
-            logger.error(f"启动导航失败: {e}")
-            messagebox.showerror("错误", f"启动导航失败: {str(e)}")
+            project_root = self.app_config.get('paths', {}).get('project_root', '/home/yq/nav24r')
 
-    def start_full_nav(self):
-        name = self.get_map_name()
-        if not name:
-            messagebox.showerror("错误", "请选择地图")
-            return
-        db_path = self.get_db_path(name)
-        if not os.path.exists(db_path):
-            messagebox.showerror("错误", "地图不存在")
-            return
-        ros_setup = self.app_config['ros']['setup_path']
-        project_root = self.app_config['paths']['project_root']
-        cmd = f"bash -c 'source {ros_setup} && ros2 launch {project_root}/launch/nav24r_full.launch.py database_path:={db_path} key:={camera_key}'"
-        subprocess.Popen(cmd, shell=True)
-        self.status_var.set(f"状态: 完整导航 | {name}")
+            cmd = (f"bash -c 'source {ros_setup} && "
+                   f"ros2 launch {project_root}/launch/nav24r_full.launch.py "
+                   f"localization:=true rtabmap_viz:=true "
+                   f"database_path:={db_path} key:={camera_key}'")
+
+            logger.info(f"启动完整导航: {name}, 数据库: {db_path}")
+            subprocess.Popen(cmd, shell=True)
+            self.status_var.set(f"状态: 完整导航 | {name}")
+
+        except Exception as e:
+            logger.error(f"启动完整导航失败: {e}")
+            messagebox.showerror("错误", f"启动完整导航失败: {str(e)}")
 
     def launch_rviz(self):
         """启动 RViz（顶视角配置）"""
         ros_setup = self.app_config['ros']['setup_path']
-        config_dir = self.app_config['paths']['config_dir']
+        config_dir = self.app_config.get('paths', {}).get('config_dir', '/home/yq/nav24r/config')
         subprocess.Popen(f"bash -c 'source {ros_setup} && rviz2 -d {config_dir}/mapping.rviz'", shell=True, start_new_session=True)
         self.status_var.set("状态: RViz 已启动（顶视角）")
 
     def launch_rviz_3d(self):
         """启动 RViz（3D 视角配置）"""
         ros_setup = self.app_config['ros']['setup_path']
-        config_dir = self.app_config['paths']['config_dir']
+        config_dir = self.app_config.get('paths', {}).get('config_dir', '/home/yq/nav24r/config')
         subprocess.Popen(f"bash -c 'source {ros_setup} && rviz2 -d {config_dir}/mapping_3d.rviz'", shell=True, start_new_session=True)
         self.status_var.set("状态: RViz 3D 已启动（多视角）")
 
     def launch_map_viewer(self):
-        """启动地图观察器（专门用于查看已建好的地图）"""
+        """启动地图观察器"""
         ros_setup = self.app_config['ros']['setup_path']
-        config_dir = self.app_config['paths']['config_dir']
+        config_dir = self.app_config.get('paths', {}).get('config_dir', '/home/yq/nav24r/config')
         subprocess.Popen(f"bash -c 'source {ros_setup} && rviz2 -d {config_dir}/map_viewer_3d.rviz'", shell=True, start_new_session=True)
         self.status_var.set("状态: 地图观察器已启动（3D 查看器）")
 
@@ -374,17 +512,18 @@ class FactorControlPanel:
 
             ros_setup = self.app_config['ros']['setup_path']
             camera_key = self.app_config['camera']['key']
+            launch_path = self.get_launch_file_path()
 
-            # 启动 RTAB-Map 定位模式（只读地图）
-            cmd = f"bash -c 'source {ros_setup} && ros2 launch factor_perception factor_perception_launch.py localization:=true database_path:={db_path} key:={camera_key}'"
+            cmd = (f"bash -c 'source {ros_setup} && "
+                   f"ros2 launch {launch_path} "
+                   f"localization:=true database_path:={db_path} key:={camera_key}'")
             subprocess.Popen(cmd, shell=True)
 
             # 等待 2 秒后启动 RViz 观察器
-            import time
             time.sleep(2)
 
-            # 启动地图观察器
-            subprocess.Popen(f"bash -c 'source {ros_setup} && rviz2 -d /home/yq/nav24r/config/map_viewer_3d.rviz'", shell=True)
+            config_dir = self.app_config.get('paths', {}).get('config_dir', '/home/yq/nav24r/config')
+            subprocess.Popen(f"bash -c 'source {ros_setup} && rviz2 -d {config_dir}/map_viewer_3d.rviz'", shell=True)
 
             self.status_var.set(f"状态: 正在查看地图 '{name}'")
             logger.info(f"查看地图: {name}")
@@ -520,7 +659,7 @@ class FactorControlPanel:
         tk.Label(steps_frame, text="导出步骤:",
                 font=('Arial', 12, 'bold')).pack(anchor=tk.W)
 
-        steps_text = """
+        steps_text = f"""
 步骤 1: 点击下方按钮启动 Database Viewer
 
 步骤 2: 在 Database Viewer 中操作:
@@ -533,7 +672,7 @@ class FactorControlPanel:
 
 步骤 4: 保存文件:
        推荐位置: ~/rtabmap_maps/{name}_octomap_{resolution}m.bt
-        """.format(resolution=resolution, name=name)
+        """
 
         tk.Label(steps_frame, text=steps_text, font=('Arial', 10),
                 justify=tk.LEFT).pack(anchor=tk.W, pady=10)
@@ -623,7 +762,6 @@ class FactorControlPanel:
             return
 
         try:
-            # 使用 subprocess.Popen 启动，不等待完成
             cmd = f"rtabmap-databaseViewer {db_path}"
             subprocess.Popen(cmd, shell=True, start_new_session=True)
             self.status_var.set(f"状态: Database Viewer 已启动 | {name}")
@@ -691,14 +829,6 @@ class FactorControlPanel:
                         return True, device_info if device_info else "OAK-D 设备"
                     except:
                         return True, "OAK-D 设备"
-
-            # 方法2: 检查 /dev 目录
-            import glob as g
-            video_devices = g.glob('/dev/video*')
-            if video_devices:
-                # 有视频设备，但需要进一步确认是否是 OAK-D
-                # 这只是备用检测方法
-                pass
 
             return False, ""
 
@@ -781,18 +911,14 @@ class FactorControlPanel:
         self.root.update()
 
         try:
-            # 重置 USB 设备（软重启）
-            # 查找 OAK-D 设备的 USB 路径
             result = subprocess.run(
                 "lsusb | grep -iE '03e7|1443|luxonis' | head -1",
                 shell=True, capture_output=True, text=True, timeout=5
             )
 
             if result.stdout:
-                # 找到设备，尝试重置
                 logger.info("尝试软重启 OAK-D 设备")
 
-                # 重置 USB 端口
                 reset_cmd = """
 for dev in /sys/bus/usb/devices/*; do
     if [ -f "$dev/idVendor" ] && [ -f "$dev/idProduct" ]; then
@@ -804,11 +930,7 @@ for dev in /sys/bus/usb/devices/*; do
 done
 """
                 subprocess.run(reset_cmd, shell=True, timeout=10)
-
-                # 等待设备重新枚举
                 time.sleep(2)
-
-                # 重新检测
                 self.update_device_status()
 
                 if self.device_connected:
@@ -831,7 +953,6 @@ done
 
     def force_reconnect(self):
         """强制重连相机（停止所有进程后重新连接）"""
-        # 确认操作
         if not messagebox.askyesno("强制重连",
             "这将停止所有运行中的 ROS2 进程，然后尝试重新连接相机。\n\n"
             "确定要继续吗？"):
@@ -842,12 +963,10 @@ done
         self.root.update()
 
         try:
-            # 步骤1: 停止所有相关进程
             logger.info("停止所有 ROS2 进程...")
             self.stop_all()
             time.sleep(2)
 
-            # 步骤2: 重置 USB
             logger.info("重置 USB 设备...")
             reset_cmd = """
 for dev in /sys/bus/usb/devices/*; do
@@ -863,11 +982,7 @@ for dev in /sys/bus/usb/devices/*; do
 done
 """
             subprocess.run(reset_cmd, shell=True, timeout=15)
-
-            # 步骤3: 等待设备重新枚举
             time.sleep(3)
-
-            # 步骤4: 重新检测设备
             self.update_device_status()
 
             if self.device_connected:
@@ -905,12 +1020,12 @@ done
             )
             if result:
                 self.force_reconnect()
-                # 再次检测
                 self.update_device_status()
                 return self.device_connected
             return False
 
         return True
+
 
 if __name__ == "__main__":
     root = tk.Tk()

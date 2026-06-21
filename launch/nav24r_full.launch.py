@@ -2,14 +2,13 @@
 # 人形机器人导航系统
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction
-from launch.conditions import IfCondition, UnlessCondition
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.substitutions import FindPackageShare
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-import os
 
 
 def generate_launch_description():
@@ -29,11 +28,14 @@ def generate_launch_description():
     cam_pitch_arg = DeclareLaunchArgument('cam_pitch', default_value='0.0')
     cam_yaw_arg = DeclareLaunchArgument('cam_yaw', default_value='0.0')
     publish_tf_arg = DeclareLaunchArgument('publish_tf', default_value='true')
-    depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='false')
-    ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.0')
+    depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='true')  # 启用深度滤波
+    ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.4')  # IR 补光
     min_feat_depth_arg = DeclareLaunchArgument('min_feat_depth', default_value='0.0')
     config_path_arg = DeclareLaunchArgument('config_path',
-        default_value='/home/yq/nav24r/config/rtabmap_custom.ini')
+        default_value=PathJoinSubstitution([
+            FindPackageShare('nav24r'),
+            'config', 'rtabmap_custom.ini'
+        ]))
     database_path_arg = DeclareLaunchArgument('database_path', default_value='~/rtabmap.db')
     localization_arg = DeclareLaunchArgument('localization', default_value='false')
     rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='true')
@@ -43,7 +45,10 @@ def generate_launch_description():
     use_sim_time_arg = DeclareLaunchArgument('use_sim_time', default_value='false')
     autostart_arg = DeclareLaunchArgument('autostart', default_value='true')
     nav2_params_file_arg = DeclareLaunchArgument('nav2_params_file',
-        default_value='/home/yq/nav24r/config/nav2_params.yaml')
+        default_value=PathJoinSubstitution([
+            FindPackageShare('nav24r'),
+            'config', 'nav2_params.yaml'
+        ]))
     map_subscribe_transient_local_arg = DeclareLaunchArgument('map_subscribe_transient_local',
         default_value='true')
     use_composition_arg = DeclareLaunchArgument('use_composition', default_value='true')
@@ -89,6 +94,7 @@ def generate_launch_description():
             'min_feat_depth': LaunchConfiguration('min_feat_depth'),
             'blob_path': PathJoinSubstitution([FindPackageShare('factor_perception'), 'blobs', 'HF-Net.blob']),
         }],
+        extra_arguments=[{'use_intra_process_comms': True}],  # 零拷贝优化
     )
 
     register_node = ComposableNode(
@@ -101,6 +107,7 @@ def generate_launch_description():
             LaunchConfiguration('camera_model'), "' != 'OAK-D-SR'"
         ])),
         parameters=[{'fill_upsampling_holes': True}],
+        extra_arguments=[{'use_intra_process_comms': True}],
     )
 
     # SLAM 建图 - 新建地图
@@ -128,6 +135,7 @@ def generate_launch_description():
             'RGBD/ProximityBySpace': 'true',
             'RGBD/ProximityByTime': 'true',
         }],
+        extra_arguments=[{'use_intra_process_comms': True}],
     )
 
     # SLAM 建图 - 续建地图
@@ -155,11 +163,13 @@ def generate_launch_description():
             'RGBD/ProximityBySpace': 'true',
             'RGBD/ProximityByTime': 'true',
         }],
+        extra_arguments=[{'use_intra_process_comms': True}],
     )
 
     rtabmap_localization = ComposableNode(
         package='rtabmap_slam',
         plugin='rtabmap_slam::CoreWrapper',
+        name='rtabmap',
         namespace='factor_perception',
         condition=IfCondition(LaunchConfiguration('localization')),
         parameters=[{
@@ -173,7 +183,11 @@ def generate_launch_description():
             'database_path': LaunchConfiguration('database_path'),
             'Mem/IncrementalMemory': 'false',
             'Mem/InitWMWithAllNodes': 'true',
+            'Grid/3D': 'true',
+            'RGBD/ProximityBySpace': 'true',
+            'RGBD/ProximityByTime': 'true',
         }],
+        extra_arguments=[{'use_intra_process_comms': True}],
     )
 
     factor_perception_container = ComposableNodeContainer(

@@ -62,8 +62,16 @@ SCRIPTS_DIR = APP_CONFIG['paths']['scripts_dir']
 MAPS_DIR = os.path.expanduser(APP_CONFIG['maps']['directory'])
 DEFAULT_DB = os.path.expanduser(APP_CONFIG['maps']['default_db'])
 
-LAUNCH_FILE = f"{PROJECT_ROOT}/factor_perception_auto.launch.py"
+LAUNCH_FILE_AUTO = f"{PROJECT_ROOT}/factor_perception_auto.launch.py"
+LAUNCH_FILE_ISOLATED = f"{PROJECT_ROOT}/launch/factor_perception_isolated.launch.py"
 FULL_NAV_LAUNCH = f"{PROJECT_ROOT}/launch/nav24r_full.launch.py"
+
+
+def get_launch_file(architecture='auto'):
+    """根据架构选择返回启动文件路径"""
+    if architecture == 'isolated':
+        return LAUNCH_FILE_ISOLATED
+    return LAUNCH_FILE_AUTO
 
 
 # ============ 工具函数 ============
@@ -205,6 +213,24 @@ HTML = '''<!DOCTYPE html>
     <div class="container">
         <h1>🚀 Factor Perception 控制面板</h1>
 
+        <!-- 运行模式 -->
+        <div class="section">
+            <h2>🎯 运行模式</h2>
+            <div class="form-row">
+                <label>模式:</label>
+                <select id="run_mode" style="flex:1" onchange="onModeChanged()">
+                    <option value="new">🆕 新建地图</option>
+                    <option value="continue">🔄 续建地图</option>
+                    <option value="localization">🧭 定位导航</option>
+                </select>
+                <label>架构:</label>
+                <select id="architecture" style="flex:1">
+                    <option value="auto">Auto（单容器）</option>
+                    <option value="isolated">Isolated（隔离容器）</option>
+                </select>
+            </div>
+        </div>
+
         <!-- 地图管理 -->
         <div class="section">
             <h2>🗺️ 地图管理</h2>
@@ -232,15 +258,15 @@ HTML = '''<!DOCTYPE html>
         <div class="section">
             <h2>⚙️ 功能模块</h2>
             <div class="grid-3" style="margin-bottom: 8px;">
-                <button class="btn btn-green btn-large" onclick="startMapping()">🗺️ 开始建图</button>
-                <button class="btn btn-blue btn-large" onclick="startNavigation()">🧭 开始导航</button>
+                <button class="btn btn-green btn-large" id="mainActionBtn" onclick="startMainAction()">🆕 开始建图</button>
                 <button class="btn btn-blue btn-large" onclick="startFullNav()">🚀 完整导航</button>
+                <button class="btn btn-red btn-large" onclick="stopAll()">⏹️ 停止所有</button>
             </div>
             <div class="grid-4">
                 <button class="btn btn-blue" onclick="launchRviz()">📊 RViz</button>
                 <button class="btn btn-blue" onclick="launchRviz3D()">📊 RViz 3D</button>
                 <button class="btn btn-purple" onclick="launchMapViewer()">🗺️ 地图观察</button>
-                <button class="btn btn-red" onclick="stopAll()">⏹️ 停止所有</button>
+                <button class="btn btn-gray" onclick="viewDatabase()">📁 数据库</button>
             </div>
         </div>
 
@@ -298,6 +324,30 @@ HTML = '''<!DOCTYPE html>
             xhr.send(JSON.stringify(data || {}));
         }
 
+        function onModeChanged() {
+            var mode = document.getElementById('run_mode').value;
+            var btn = document.getElementById('mainActionBtn');
+            var modeLabels = {
+                'new': {text: '🆕 开始建图', cls: 'btn-green'},
+                'continue': {text: '🔄 续建地图', cls: 'btn-orange'},
+                'localization': {text: '🧭 开始定位', cls: 'btn-blue'},
+            };
+            var info = modeLabels[mode] || modeLabels['new'];
+            btn.textContent = info.text;
+            btn.className = 'btn ' + info.cls + ' btn-large';
+        }
+
+        function startMainAction() {
+            var mode = document.getElementById('run_mode').value;
+            if (mode === 'new') {
+                startMapping();
+            } else if (mode === 'continue') {
+                startContinueMapping();
+            } else if (mode === 'localization') {
+                startNavigation();
+            }
+        }
+
         function refreshMaps() {
             api('/api/maps', {}, function(data) {
                 var select = document.getElementById('map_select');
@@ -327,6 +377,8 @@ HTML = '''<!DOCTYPE html>
             api('/api/map/continue', {map_id: mapId}, function(data) {
                 setStatus(data.message, data.error ? 'error' : 'ok');
                 document.getElementById('map_id').value = mapId;
+                document.getElementById('run_mode').value = 'continue';
+                onModeChanged();
             });
         }
 
@@ -343,8 +395,19 @@ HTML = '''<!DOCTYPE html>
         function startMapping() {
             var mapId = document.getElementById('map_id').value.trim();
             if (!mapId) { setStatus('请先输入或选择地图ID', 'error'); return; }
+            var arch = document.getElementById('architecture').value;
             setStatus('正在启动建图模式...', 'running');
-            api('/api/start/mapping', {map_id: mapId}, function(data) {
+            api('/api/start/mapping', {map_id: mapId, architecture: arch}, function(data) {
+                setStatus(data.message, data.error ? 'error' : 'running');
+            });
+        }
+
+        function startContinueMapping() {
+            var mapId = document.getElementById('map_select').value;
+            if (!mapId) { setStatus('请选择地图进行续建', 'error'); return; }
+            var arch = document.getElementById('architecture').value;
+            setStatus('正在启动续建模式...', 'running');
+            api('/api/start/continue_mapping', {map_id: mapId, architecture: arch}, function(data) {
                 setStatus(data.message, data.error ? 'error' : 'running');
             });
         }
@@ -352,8 +415,9 @@ HTML = '''<!DOCTYPE html>
         function startNavigation() {
             var mapId = document.getElementById('map_select').value;
             if (!mapId) { setStatus('请选择地图', 'error'); return; }
+            var arch = document.getElementById('architecture').value;
             setStatus('正在启动导航模式...', 'running');
-            api('/api/start/navigation', {map_id: mapId}, function(data) {
+            api('/api/start/navigation', {map_id: mapId, architecture: arch}, function(data) {
                 setStatus(data.message, data.error ? 'error' : 'running');
             });
         }
@@ -370,8 +434,9 @@ HTML = '''<!DOCTYPE html>
         function viewMap() {
             var mapId = document.getElementById('map_select').value;
             if (!mapId) { setStatus('请选择地图', 'error'); return; }
+            var arch = document.getElementById('architecture').value;
             setStatus('正在启动地图查看...', 'running');
-            api('/api/map/view', {map_id: mapId}, function(data) {
+            api('/api/map/view', {map_id: mapId, architecture: arch}, function(data) {
                 setStatus(data.message, data.error ? 'error' : 'running');
             });
         }
@@ -520,14 +585,16 @@ class Handler(BaseHTTPRequestHandler):
         # ---- 查看地图 ----
         elif path == '/api/map/view':
             map_id = data.get('map_id', '').strip()
+            architecture = data.get('architecture', 'auto')
             db_path = get_db_path(map_id)
             if not os.path.exists(db_path):
                 return {"error": True, "message": f"地图文件不存在: {db_path}"}
             # 启动 RTAB-Map 定位模式
-            cmd = f"ros2 launch {LAUNCH_FILE} localization:=true rtabmap_viz:=true database_path:={db_path} key:={CAMERA_KEY}"
+            launch_file = get_launch_file(architecture)
+            cmd = f"ros2 launch {launch_file} localization:=true rtabmap_viz:=true database_path:={db_path} key:={CAMERA_KEY}"
             run_ros2_cmd(cmd)
-            logger.info(f"查看地图: {map_id}")
-            return {"error": False, "message": f"正在查看地图 '{map_id}'"}
+            logger.info(f"查看地图: {map_id} (架构: {architecture})")
+            return {"error": False, "message": f"正在查看地图 '{map_id}' ({architecture})"}
 
         # ---- 地图质量分析 ----
         elif path == '/api/map/analyze':
@@ -563,24 +630,43 @@ class Handler(BaseHTTPRequestHandler):
         # ---- 开始建图 ----
         elif path == '/api/start/mapping':
             map_id = data.get('map_id', '').strip()
+            architecture = data.get('architecture', 'auto')
             if not map_id:
                 return {"error": True, "message": "请输入地图ID"}
             db_path = get_db_path(map_id)
-            cmd = f"ros2 launch {LAUNCH_FILE} localization:=false rtabmap_viz:=true database_path:={db_path} key:={CAMERA_KEY}"
+            launch_file = get_launch_file(architecture)
+            cmd = f"ros2 launch {launch_file} localization:=false rtabmap_viz:=true database_path:={db_path} key:={CAMERA_KEY}"
             run_ros2_cmd(cmd)
-            logger.info(f"启动建图: {map_id}")
-            return {"error": False, "message": f"建图模式已启动 | 地图: {map_id}"}
+            logger.info(f"启动建图: {map_id} (架构: {architecture})")
+            return {"error": False, "message": f"建图模式已启动 | 地图: {map_id} | 架构: {architecture}"}
+
+        # ---- 续建建图 ----
+        elif path == '/api/start/continue_mapping':
+            map_id = data.get('map_id', '').strip()
+            architecture = data.get('architecture', 'auto')
+            if not map_id:
+                return {"error": True, "message": "请选择地图"}
+            db_path = get_db_path(map_id)
+            if not os.path.exists(db_path):
+                return {"error": True, "message": f"地图文件不存在: {db_path}"}
+            launch_file = get_launch_file(architecture)
+            cmd = f"ros2 launch {launch_file} localization:=false rtabmap_viz:=true continue_mapping:=true database_path:={db_path} key:={CAMERA_KEY}"
+            run_ros2_cmd(cmd)
+            logger.info(f"启动续建: {map_id} (架构: {architecture})")
+            return {"error": False, "message": f"续建模式已启动 | 地图: {map_id} | 架构: {architecture}"}
 
         # ---- 开始导航 ----
         elif path == '/api/start/navigation':
             map_id = data.get('map_id', '').strip()
+            architecture = data.get('architecture', 'auto')
             db_path = get_db_path(map_id)
             if not os.path.exists(db_path):
                 return {"error": True, "message": f"地图文件不存在: {db_path}"}
-            cmd = f"ros2 launch {LAUNCH_FILE} localization:=true rtabmap_viz:=true database_path:={db_path} key:={CAMERA_KEY}"
+            launch_file = get_launch_file(architecture)
+            cmd = f"ros2 launch {launch_file} localization:=true rtabmap_viz:=true database_path:={db_path} key:={CAMERA_KEY}"
             run_ros2_cmd(cmd)
-            logger.info(f"启动导航: {map_id}")
-            return {"error": False, "message": f"导航模式已启动 | 地图: {map_id}"}
+            logger.info(f"启动导航: {map_id} (架构: {architecture})")
+            return {"error": False, "message": f"导航模式已启动 | 地图: {map_id} | 架构: {architecture}"}
 
         # ---- 完整导航 ----
         elif path == '/api/start/full':

@@ -28,7 +28,7 @@ def generate_launch_description():
     odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='odom')
     cam_pos_x_arg = DeclareLaunchArgument('cam_pos_x', default_value='0.0')
     cam_pos_y_arg = DeclareLaunchArgument('cam_pos_y', default_value='0.0')
-    cam_pos_z_arg = DeclareLaunchArgument('cam_pos_z', default_value='1.0')  # 相机高度1m
+    cam_pos_z_arg = DeclareLaunchArgument('cam_pos_z', default_value='1.0')  # 相机高度1m（isolated 架构有意设置更高，用于测试/特殊场景）
     cam_roll_arg = DeclareLaunchArgument('cam_roll', default_value='0.0')
     cam_pitch_arg = DeclareLaunchArgument('cam_pitch', default_value='0.0')
     cam_yaw_arg = DeclareLaunchArgument('cam_yaw', default_value='0.0')
@@ -45,7 +45,7 @@ def generate_launch_description():
         ]))
     database_path_arg = DeclareLaunchArgument('database_path', default_value='~/rtabmap.db')
     localization_arg = DeclareLaunchArgument('localization', default_value='false')
-    rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='false')  # 默认关闭可视化
+    rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='false')  # 默认关闭可视化（isolated 架构在服务器/无头环境下运行，有意关闭）
     continue_mapping_arg = DeclareLaunchArgument('continue_mapping', default_value='false')
 
     # 设备检查参数
