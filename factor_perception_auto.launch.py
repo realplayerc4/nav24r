@@ -5,12 +5,13 @@ from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitut
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.substitutions import FindPackageShare
+import os
 
 
 def generate_launch_description():
     camera_model_arg = DeclareLaunchArgument('camera_model', default_value='OAK-D-PRO-W')
     mxid_or_name_arg = DeclareLaunchArgument('mxid_or_name', default_value='')  # 自动检测
-    key_arg = DeclareLaunchArgument('key', default_value='12D0C1E7D1AB466C09BD9AE6427D5240')  # 相机 Key
+    key_arg = DeclareLaunchArgument('key', default_value=os.environ.get('FACTOR_PERCEPTION_KEY', ''))  # 从环境变量读取
     oak_tf_prefix_arg = DeclareLaunchArgument('oak_tf_prefix', default_value='oak')
     base_frame_id_arg = DeclareLaunchArgument('base_frame_id', default_value='base_link')
     odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='odom')

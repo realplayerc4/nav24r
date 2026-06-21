@@ -3,7 +3,7 @@
 # 版本: v2.0 - 2026-06-18
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, RegisterEventHandler, EmitEvent, LogInfo, TimerAction, ExecuteProcess, GroupAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, RegisterEventHandler, EmitEvent, LogInfo, TimerAction, ExecuteProcess, GroupAction, OpaqueFunction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, TextSubstitution
 from launch_ros.actions import ComposableNodeContainer, Node, LifecycleNode
@@ -22,7 +22,7 @@ def generate_launch_description():
     # Factor Perception 参数
     camera_model_arg = DeclareLaunchArgument('camera_model', default_value='OAK-D-PRO-W')
     mxid_or_name_arg = DeclareLaunchArgument('mxid_or_name', default_value='')
-    key_arg = DeclareLaunchArgument('key', default_value='12D0C1E7D1AB466C09BD9AE6427D5240')
+    key_arg = DeclareLaunchArgument('key', default_value=os.environ.get('FACTOR_PERCEPTION_KEY', ''))
     oak_tf_prefix_arg = DeclareLaunchArgument('oak_tf_prefix', default_value='oak')
     base_frame_id_arg = DeclareLaunchArgument('base_frame_id', default_value='base_link')
     odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='odom')
@@ -228,33 +228,61 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('rtabmap_viz')),
     )
 
-    # ============ 错误恢复机制 ============
+    # ============ 错误恢复机制（带重启限制和指数退避） ============
 
-    # 硬件容器崩溃时的自动重启
+    # 最大重启次数和退避参数
+    MAX_RESTART_COUNT = 3
+    BASE_DELAY = 3.0  # 初始延迟（秒）
+
+    # 使用闭包计数器追踪重启次数
+    hardware_restart_count = [0]
+    slam_restart_count = [0]
+
+    def make_restart_with_backoff(container_name, restart_count_ref, container_action):
+        """创建带指数退避和最大重启次数限制的重启动作。
+
+        退避策略: delay = BASE_DELAY * 2^attempt
+        第1次: 3s, 第2次: 6s, 第3次: 12s, 之后不再重启
+        """
+        def on_exit_handler(event_context):
+            restart_count_ref[0] += 1
+            count = restart_count_ref[0]
+            if count > MAX_RESTART_COUNT:
+                return [LogInfo(msg=(
+                    f'[CRITICAL] {container_name} 已连续崩溃 {count} 次，'
+                    f'超过最大重启次数 ({MAX_RESTART_COUNT})，停止重启。'
+                    f'请检查设备连接和日志。'
+                ))]
+            delay = BASE_DELAY * (2 ** (count - 1))
+            return [
+                LogInfo(msg=(
+                    f'[WARN] {container_name} 崩溃 (第{count}/{MAX_RESTART_COUNT}次)，'
+                    f'{delay:.0f}秒后重启...'
+                )),
+                TimerAction(
+                    period=delay,
+                    actions=[container_action]
+                )
+            ]
+        return on_exit_handler
+
+    # 硬件容器崩溃时的自动重启（带限制和退避）
     hardware_restart_handler = RegisterEventHandler(
         OnProcessExit(
             target_action=hardware_container,
-            on_exit=[
-                LogInfo(msg='[ERROR] Hardware container crashed, restarting in 3 seconds...'),
-                TimerAction(
-                    period=3.0,
-                    actions=[hardware_container]
-                )
-            ]
+            on_exit=make_restart_with_backoff(
+                'Hardware container', hardware_restart_count, hardware_container
+            )
         )
     )
 
-    # SLAM 容器崩溃时的自动重启
+    # SLAM 容器崩溃时的自动重启（带限制和退避）
     slam_restart_handler = RegisterEventHandler(
         OnProcessExit(
             target_action=slam_container,
-            on_exit=[
-                LogInfo(msg='[ERROR] SLAM container crashed, restarting in 3 seconds...'),
-                TimerAction(
-                    period=3.0,
-                    actions=[slam_container]
-                )
-            ]
+            on_exit=make_restart_with_backoff(
+                'SLAM container', slam_restart_count, slam_container
+            )
         )
     )
 

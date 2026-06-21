@@ -18,7 +18,7 @@ def generate_launch_description():
     # Factor Perception 参数
     camera_model_arg = DeclareLaunchArgument('camera_model', default_value='OAK-D-PRO-W')
     mxid_or_name_arg = DeclareLaunchArgument('mxid_or_name', default_value='')
-    key_arg = DeclareLaunchArgument('key', default_value='12D0C1E7D1AB466C09BD9AE6427D5240')
+    key_arg = DeclareLaunchArgument('key', default_value=os.environ.get('FACTOR_PERCEPTION_KEY', ''))
     oak_tf_prefix_arg = DeclareLaunchArgument('oak_tf_prefix', default_value='oak')
     base_frame_id_arg = DeclareLaunchArgument('base_frame_id', default_value='base_link')
     odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='odom')
@@ -160,6 +160,7 @@ def generate_launch_description():
     rtabmap_localization = ComposableNode(
         package='rtabmap_slam',
         plugin='rtabmap_slam::CoreWrapper',
+        name='rtabmap',
         namespace='factor_perception',
         condition=IfCondition(LaunchConfiguration('localization')),
         parameters=[{
@@ -173,6 +174,9 @@ def generate_launch_description():
             'database_path': LaunchConfiguration('database_path'),
             'Mem/IncrementalMemory': 'false',
             'Mem/InitWMWithAllNodes': 'true',
+            'Grid/3D': 'true',
+            'RGBD/ProximityBySpace': 'true',
+            'RGBD/ProximityByTime': 'true',
         }],
     )
 
