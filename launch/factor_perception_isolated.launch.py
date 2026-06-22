@@ -3,9 +3,9 @@
 # 版本: v2.0 - 2026-06-18
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, RegisterEventHandler, EmitEvent, LogInfo, TimerAction, ExecuteProcess, GroupAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, RegisterEventHandler, EmitEvent, LogInfo, TimerAction, ExecuteProcess, GroupAction, OpaqueFunction
 from launch.conditions import IfCondition, UnlessCondition
-from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, TextSubstitution
+from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, TextSubstitution, EnvironmentVariable
 from launch_ros.actions import ComposableNodeContainer, Node, LifecycleNode
 from launch_ros.descriptions import ComposableNode
 from launch_ros.substitutions import FindPackageShare
@@ -22,13 +22,13 @@ def generate_launch_description():
     # Factor Perception 参数
     camera_model_arg = DeclareLaunchArgument('camera_model', default_value='OAK-D-PRO-W')
     mxid_or_name_arg = DeclareLaunchArgument('mxid_or_name', default_value='')
-    key_arg = DeclareLaunchArgument('key', default_value='12D0C1E7D1AB466C09BD9AE6427D5240')
+    key_arg = DeclareLaunchArgument('key', default_value=EnvironmentVariable('FACTOR_PERCEPTION_KEY', default_value=''))
     oak_tf_prefix_arg = DeclareLaunchArgument('oak_tf_prefix', default_value='oak')
     base_frame_id_arg = DeclareLaunchArgument('base_frame_id', default_value='base_link')
     odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='odom')
     cam_pos_x_arg = DeclareLaunchArgument('cam_pos_x', default_value='0.0')
     cam_pos_y_arg = DeclareLaunchArgument('cam_pos_y', default_value='0.0')
-    cam_pos_z_arg = DeclareLaunchArgument('cam_pos_z', default_value='1.0')  # 相机高度1m
+    cam_pos_z_arg = DeclareLaunchArgument('cam_pos_z', default_value='1.0')  # 相机高度1m（v2.0隔离版安装位置更高）
     cam_roll_arg = DeclareLaunchArgument('cam_roll', default_value='0.0')
     cam_pitch_arg = DeclareLaunchArgument('cam_pitch', default_value='0.0')
     cam_yaw_arg = DeclareLaunchArgument('cam_yaw', default_value='0.0')
@@ -43,20 +43,22 @@ def generate_launch_description():
             FindPackageShare('nav24r'),
             'config', 'rtabmap_custom.ini'
         ]))
-    database_path_arg = DeclareLaunchArgument('database_path', default_value='~/rtabmap.db')
+    database_path_arg = DeclareLaunchArgument('database_path', default_value=EnvironmentVariable('HOME', default_value='/home/yq') + '/rtabmap.db')
     localization_arg = DeclareLaunchArgument('localization', default_value='false')
-    rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='false')  # 默认关闭可视化
+    rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='true')  # 统一默认值
     continue_mapping_arg = DeclareLaunchArgument('continue_mapping', default_value='false')
 
     # 设备检查参数
     skip_device_check_arg = DeclareLaunchArgument('skip_device_check', default_value='false')
 
-    # ============ 设备检查（启动前） ============
+    # ============ 设备检查（启动前 - 信息性检查，不参与条件判断） ============
+    # 注意：此检查仅用于调试和确认设备连接状态，不影响节点的启动。
+    # 如需基于设备检查结果的条件启动，请使用 skip_device_check 参数。
 
-    # 设备检查脚本
+    # 设备检查脚本（输出到屏幕，不参与控制逻辑）
     device_check_cmd = ExecuteProcess(
         cmd=['bash', '-c',
-             'lsusb | grep -qiE "03e7|1443|luxonis|oak" && echo "DEVICE_FOUND" || echo "DEVICE_NOT_FOUND"'],
+             'lsusb | grep -qiE "03e7|1443|luxonis|oak" && echo "✓ OAK-D device found" || echo "⚠ No OAK-D device found"'],
         name='device_check',
         output='screen',
     )
@@ -228,34 +230,52 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('rtabmap_viz')),
     )
 
-    # ============ 错误恢复机制 ============
+    # ============ 错误恢复机制（带重启限制和退避策略） ============
 
-    # 硬件容器崩溃时的自动重启
-    hardware_restart_handler = RegisterEventHandler(
-        OnProcessExit(
-            target_action=hardware_container,
-            on_exit=[
-                LogInfo(msg='[ERROR] Hardware container crashed, restarting in 3 seconds...'),
+    MAX_RESTART_ATTEMPTS = 3       # 最大重启次数
+    BASE_RESTART_DELAY = 3.0      # 初始重启延迟（秒）
+    BACKOFF_FACTOR = 2.0          # 退避倍数（3s → 6s → 12s）
+
+    # 重启计数器（使用列表以支持闭包内修改）
+    hardware_restart_count = [0]
+    slam_restart_count = [0]
+
+    def make_restart_handler(container, restart_count, container_name):
+        """创建带重启限制和指数退避的事件处理器"""
+        def on_exit_event(context):
+            restart_count[0] += 1
+            attempt = restart_count[0]
+            if attempt > MAX_RESTART_ATTEMPTS:
+                return [LogInfo(msg=(
+                    f'[CRITICAL] {container_name} 已达到最大重启次数 ({MAX_RESTART_ATTEMPTS})，'
+                    f'停止重启。请检查设备连接或日志排查崩溃原因。'
+                ))]
+            delay = BASE_RESTART_DELAY * (BACKOFF_FACTOR ** (attempt - 1))
+            return [
+                LogInfo(msg=(
+                    f'[WARN] {container_name} 崩溃，第 {attempt}/{MAX_RESTART_ATTEMPTS} 次重启，'
+                    f'等待 {delay:.1f} 秒后重启...'
+                )),
                 TimerAction(
-                    period=3.0,
-                    actions=[hardware_container]
+                    period=delay,
+                    actions=[container]
                 )
             ]
+        return RegisterEventHandler(
+            OnProcessExit(
+                target_action=container,
+                on_exit=OpaqueFunction(function=on_exit_event)
+            )
         )
+
+    # 硬件容器崩溃时的自动重启（带限制和退避）
+    hardware_restart_handler = make_restart_handler(
+        hardware_container, hardware_restart_count, 'Hardware container'
     )
 
-    # SLAM 容器崩溃时的自动重启
-    slam_restart_handler = RegisterEventHandler(
-        OnProcessExit(
-            target_action=slam_container,
-            on_exit=[
-                LogInfo(msg='[ERROR] SLAM container crashed, restarting in 3 seconds...'),
-                TimerAction(
-                    period=3.0,
-                    actions=[slam_container]
-                )
-            ]
-        )
+    # SLAM 容器崩溃时的自动重启（带限制和退避）
+    slam_restart_handler = make_restart_handler(
+        slam_container, slam_restart_count, 'SLAM container'
     )
 
     # ============ 返回 LaunchDescription ============

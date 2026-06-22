@@ -1,7 +1,7 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition, UnlessCondition
-from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, EnvironmentVariable
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.substitutions import FindPackageShare
@@ -10,13 +10,13 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     camera_model_arg = DeclareLaunchArgument('camera_model', default_value='OAK-D-PRO-W')
     mxid_or_name_arg = DeclareLaunchArgument('mxid_or_name', default_value='')  # 自动检测
-    key_arg = DeclareLaunchArgument('key', default_value='12D0C1E7D1AB466C09BD9AE6427D5240')  # 相机 Key
+    key_arg = DeclareLaunchArgument('key', default_value=EnvironmentVariable('FACTOR_PERCEPTION_KEY', default_value=''))  # 相机 Key（通过环境变量 FACTOR_PERCEPTION_KEY 传入）
     oak_tf_prefix_arg = DeclareLaunchArgument('oak_tf_prefix', default_value='oak')
     base_frame_id_arg = DeclareLaunchArgument('base_frame_id', default_value='base_link')
     odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='odom')
     cam_pos_x_arg = DeclareLaunchArgument('cam_pos_x', default_value='0.0')  # 相机位置: 前方
     cam_pos_y_arg = DeclareLaunchArgument('cam_pos_y', default_value='0.0')  # 相机位置: 正中
-    cam_pos_z_arg = DeclareLaunchArgument('cam_pos_z', default_value='0.5')  # 相机高度: 0.5m
+    cam_pos_z_arg = DeclareLaunchArgument('cam_pos_z', default_value='1.0')  # 相机高度: 1.0m（统一默认值）
     cam_roll_arg = DeclareLaunchArgument('cam_roll', default_value='0.0')
     cam_pitch_arg = DeclareLaunchArgument('cam_pitch', default_value='0.0')  # 相机俯仰: 水平
     cam_yaw_arg = DeclareLaunchArgument('cam_yaw', default_value='0.0')
@@ -24,8 +24,11 @@ def generate_launch_description():
     depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='true')  # 启用深度滤波
     ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.4')  # IR 补光
     min_feat_depth_arg = DeclareLaunchArgument('min_feat_depth', default_value='0.0')
-    config_path_arg = DeclareLaunchArgument('config_path', default_value='/home/yq/nav24r/config/rtabmap_custom.ini')
-    database_path_arg = DeclareLaunchArgument('database_path', default_value='~/rtabmap.db')
+    config_path_arg = DeclareLaunchArgument('config_path',
+        default_value=PathJoinSubstitution([
+            FindPackageShare('nav24r'), 'config', 'rtabmap_custom.ini'
+        ]))
+    database_path_arg = DeclareLaunchArgument('database_path', default_value=EnvironmentVariable('HOME', default_value='/home/yq') + '/rtabmap.db')
     localization_arg = DeclareLaunchArgument('localization', default_value='false')
     rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='true')
     # 续建模式: 传入字符串 'true' 来加载已有地图数据
@@ -142,6 +145,7 @@ def generate_launch_description():
     rtabmap_localization = ComposableNode(
         package = 'rtabmap_slam',
         plugin = 'rtabmap_slam::CoreWrapper',
+        name = 'rtabmap',  # 与新建/续建节点保持一致，确保话题名匹配
         namespace = 'factor_perception',
         condition = IfCondition(LaunchConfiguration('localization')),
         parameters = [{
@@ -156,6 +160,8 @@ def generate_launch_description():
             'Mem/IncrementalMemory': 'false',
             'Mem/InitWMWithAllNodes': 'true',
             'Grid/3D': 'true',
+            'RGBD/ProximityBySpace': 'true',
+            'RGBD/ProximityByTime': 'true',
         }],
     )
 
