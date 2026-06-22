@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # Factor Perception 启动脚本
 # 支持建图和定位模式
 

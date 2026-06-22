@@ -80,7 +80,7 @@ def analyze_map(db_path):
         if len(nodes) > 10:
             # 抽样检查节点间距
             sample_size = min(50, len(nodes))
-            cursor.execute(f"SELECT id FROM Node ORDER BY stamp LIMIT {sample_size}")
+            cursor.execute("SELECT id FROM Node ORDER BY stamp LIMIT ?", (sample_size,))
             sample_nodes = [n[0] for n in cursor.fetchall()]
 
             print(f"  分析样本数: {sample_size}")

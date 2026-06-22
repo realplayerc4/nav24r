@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # Factor Perception 测试脚本 - ROS2 Jazzy 版本
 
 echo "========================================="

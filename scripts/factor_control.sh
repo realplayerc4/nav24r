@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # Factor Perception 一键启动脚本
 # 建图模式 vs 导航模式
 

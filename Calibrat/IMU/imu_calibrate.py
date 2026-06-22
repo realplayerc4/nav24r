@@ -42,7 +42,7 @@ def collect_imu_data(duration_sec=5, sample_rate=100):
                     gyro = pkt.gyroscope
                     acc_data.append([acc.x, acc.y, acc.z])
                     gyro_data.append([gyro.x, gyro.y, gyro.z])
-            except:
+            except Exception:
                 pass
 
         pipeline.stop()

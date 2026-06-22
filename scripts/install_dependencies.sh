@@ -2,7 +2,7 @@
 # ROS2 Jazzy 依赖安装脚本
 # 用于安装 Nav2 和其他缺失的依赖
 
-set -e
+set -euo pipefail
 
 echo "========================================="
 echo "ROS2 Jazzy 依赖安装脚本"

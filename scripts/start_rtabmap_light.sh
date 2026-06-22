@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # RTAB-Map 轻量化启动脚本
 # 禁用内置可视化，使用独立RViz2
 

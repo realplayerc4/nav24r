@@ -200,7 +200,17 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         db_path = sys.argv[1]
     else:
-        # 默认地图
-        db_path = os.path.expanduser("~/rtabmap_maps/map_20260615_1424.db")
+        # 自动查找最新地图
+        maps_dir = os.path.expanduser("~/rtabmap_maps")
+        if os.path.exists(maps_dir):
+            maps = [f for f in os.listdir(maps_dir) if f.endswith('.db')]
+            if maps:
+                latest = max([os.path.join(maps_dir, f) for f in maps],
+                           key=os.path.getmtime)
+                db_path = latest
+            else:
+                db_path = os.path.expanduser("~/rtabmap.db")
+        else:
+            db_path = os.path.expanduser("~/rtabmap.db")
 
     analyze_rtabmap_db(db_path)

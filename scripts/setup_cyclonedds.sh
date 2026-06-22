@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # Cyclone DDS 配置脚本
 # 用于设置 ROS2 Jazzy 的 DDS 环境
 

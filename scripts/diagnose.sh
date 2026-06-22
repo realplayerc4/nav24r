@@ -1,5 +1,6 @@
 #!/bin/bash
 # Factor Perception 诊断脚本
+set -euo pipefail
 
 echo "=========================================="
 echo "Factor Perception 诊断检查"
@@ -11,7 +12,7 @@ lsusb | grep -i "Movidius" && echo "   ✅ OAK-D 相机已连接" || echo "   �
 
 echo ""
 echo "2. 检查 ROS2 环境..."
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash
 ros2 topic list 2>/dev/null && echo "   ✅ ROS2 正常" || echo "   ❌ ROS2 有问题"
 
 echo ""
@@ -36,9 +37,9 @@ echo "=========================================="
 echo ""
 echo "建议启动命令（在终端运行）："
 echo "建图模式："
-echo "  source /opt/ros/humble/setup.bash"
+echo "  source /opt/ros/jazzy/setup.bash"
 echo "  ros2 launch /home/yq/nav24r/factor_perception_auto.launch.py localization:=false database_path:=~/rtabmap_maps/test.db"
 echo ""
 echo "定位模式："
-echo "  source /opt/ros/humble/setup.bash"
+echo "  source /opt/ros/jazzy/setup.bash"
 echo "  ros2 launch /home/yq/nav24r/factor_perception_auto.launch.py localization:=true database_path:=~/rtabmap.db"

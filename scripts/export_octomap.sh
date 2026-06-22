@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # 从现有地图生成高密度 Octomap
 
 echo "========================================="

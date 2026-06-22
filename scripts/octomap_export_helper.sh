@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # 使用 RTAB-Map Database Viewer 导出 Octomap 的自动化脚本
 
 echo "╔═══════════════════════════════════════════════════════════╗"

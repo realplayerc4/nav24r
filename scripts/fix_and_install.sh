@@ -1,7 +1,7 @@
 #!/bin/bash
 # 一键修复 GPG 密钥并安装所有依赖
 
-set -e
+set -euo pipefail
 
 echo "========================================="
 echo "ROS2 Jazzy 一键修复和安装脚本"

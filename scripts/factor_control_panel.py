@@ -380,7 +380,6 @@ class FactorControlPanel:
             subprocess.Popen(cmd, shell=True)
 
             # 等待 2 秒后启动 RViz 观察器
-            import time
             time.sleep(2)
 
             # 启动地图观察器
@@ -689,7 +688,7 @@ class FactorControlPanel:
                                     device_info = parts[1].strip()
                                     break
                         return True, device_info if device_info else "OAK-D 设备"
-                    except:
+                    except Exception:
                         return True, "OAK-D 设备"
 
             # 方法2: 检查 /dev 目录

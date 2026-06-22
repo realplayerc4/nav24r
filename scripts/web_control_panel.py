@@ -511,11 +511,19 @@ class Handler(BaseHTTPRequestHandler):
             map_id = data.get('map_id', '').strip()
             if map_id == "default":
                 return {"error": True, "message": "不能删除默认地图"}
+            # 检查确认 token（防止 CSRF）
+            confirm_token = data.get('confirm_token', '')
+            if not confirm_token:
+                return {"error": True, "message": "缺少删除确认 token"}
             db_path = get_db_path(map_id)
             if os.path.exists(db_path):
-                os.remove(db_path)
-                logger.info(f"删除地图: {map_id}")
-            return {"error": False, "message": f"地图 '{map_id}' 已删除"}
+                # 移动到回收站而非直接删除
+                trash_dir = os.path.join(MAPS_DIR, ".trash")
+                os.makedirs(trash_dir, exist_ok=True)
+                trash_path = os.path.join(trash_dir, f"{map_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+                os.rename(db_path, trash_path)
+                logger.info(f"删除地图: {map_id} -> {trash_path}")
+            return {"error": False, "message": f"地图 '{map_id}' 已移到回收站"}
 
         # ---- 查看地图 ----
         elif path == '/api/map/view':
@@ -629,5 +637,5 @@ if __name__ == '__main__':
     print(f"地图目录: {MAPS_DIR}")
     print(f"请在浏览器中打开: http://localhost:5000")
     print("=" * 50)
-    server = HTTPServer(('0.0.0.0', 5000), Handler)
+    server = HTTPServer(('127.0.0.1', 5000), Handler)
     server.serve_forever()

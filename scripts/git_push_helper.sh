@@ -1,13 +1,17 @@
 #!/bin/bash
 # GitHub 推送助手脚本
+set -euo pipefail
 
 echo "========================================="
 echo "GitHub 推送助手"
 echo "========================================="
 echo ""
 
+# 获取当前分支名
+CURRENT_BRANCH=$(git branch --show-current)
+
 # 检查是否有待推送的提交
-COMMITS_AHEAD=$(git rev-list --count origin/main..main 2>/dev/null || echo "0")
+COMMITS_AHEAD=$(git rev-list --count origin/${CURRENT_BRANCH}..${CURRENT_BRANCH} 2>/dev/null || echo "0")
 
 if [ "$COMMITS_AHEAD" = "0" ]; then
     echo "✅ 本地仓库与远程同步，无需推送"
@@ -27,7 +31,7 @@ if command -v gh &> /dev/null; then
         echo "✅ 已通过 GitHub CLI 认证"
         echo ""
         echo "正在推送..."
-        git push origin main
+        git push origin ${CURRENT_BRANCH}
         echo ""
         echo "✅ 推送成功！"
         exit 0
