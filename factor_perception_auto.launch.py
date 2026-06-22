@@ -24,7 +24,9 @@ def generate_launch_description():
     depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='true')  # 启用深度滤波
     ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.4')  # IR 补光
     min_feat_depth_arg = DeclareLaunchArgument('min_feat_depth', default_value='0.0')
-    config_path_arg = DeclareLaunchArgument('config_path', default_value='/home/yq/nav24r/config/rtabmap_custom.ini')
+    config_path_arg = DeclareLaunchArgument('config_path', default_value=PathJoinSubstitution([
+        FindPackageShare('nav24r'), 'config', 'rtabmap_custom.ini'
+    ]))
     database_path_arg = DeclareLaunchArgument('database_path', default_value='~/rtabmap.db')
     localization_arg = DeclareLaunchArgument('localization', default_value='false')
     rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='true')

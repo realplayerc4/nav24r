@@ -8,7 +8,7 @@ CAMERA_MODEL="OAK-D-PRO-W"
 CAM_POS_X="0.0"
 CAM_POS_Y="0.0"
 CAM_POS_Z="1.0"  # 相机高度1m
-CONFIG_PATH="/home/yq/nav24r/config/rtabmap_custom.ini"
+CONFIG_PATH="$HOME/nav24r/config/rtabmap_custom.ini"
 DATABASE_PATH="~/rtabmap.db"
 
 # ==================== 功能选择 ====================
@@ -78,7 +78,7 @@ read -p "是否启动轻量化 RViz2? (y/n): " RVIZ_CHOICE
 if [[ "$RVIZ_CHOICE" == "y" || "$RVIZ_CHOICE" == "Y" ]]; then
     echo "启动轻量化 RViz2..."
 
-    RVIZ_CONFIG="/home/yq/nav24r/config/rtabmap_light.rviz"
+    RVIZ_CONFIG="$HOME/nav24r/config/rtabmap_light.rviz"
 
     if [ ! -f "$RVIZ_CONFIG" ]; then
         echo "警告: 轻量化配置文件不存在，使用默认配置"
