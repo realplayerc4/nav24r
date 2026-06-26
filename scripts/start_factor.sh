@@ -2,8 +2,10 @@
 # Factor Perception 启动脚本
 # 支持建图和定位模式
 
+set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="/home/yq/nav24r"
+PROJECT_DIR="$(dirname "${SCRIPT_DIR}")"
 
 # 默认参数
 MODE="mapping"  # mapping 或 localization
@@ -66,7 +68,7 @@ done
 # 检查 ROS2 环境
 if [ -z "$ROS_DISTRO" ]; then
     echo -e "${YELLOW}正在加载 ROS2 环境...${NC}"
-    source /opt/ros/humble/setup.bash
+    source /opt/ros/jazzy/setup.bash
 fi
 
 # 检查相机连接

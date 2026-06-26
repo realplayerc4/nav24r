@@ -327,261 +327,262 @@ RTAB-Map (Real-Time Appearance-Based Mapping) 是 Factor Perception 的后端核
 
 ---
 
-### 2.2 运行模式
-
-#### 2.2.1 SLAM 模式 (建图)
-
-**参数:** `localization:=false`
+### 2.1.1 源码架构
 
 ```
-功能:
-- 创建新地图
-- 增量建图
-- 闭环检测
-- 地图优化
+rtabmap/                              # 核心库（纯 C++，无 ROS 依赖）
+├── corelib/
+│   ├── include/rtabmap/core/
+│   │   ├── Rtabmap.h             # ★ 主 SLAM 类 — 算法引擎
+│   │   ├── Memory.h              # ★ 三层记忆管理
+│   │   ├── BayesFilter.h         # ★ 贝叶斯回环检测
+│   │   ├── VWDictionary.h        # 视觉词典（BoW）
+│   │   ├── Signature.h           # 地图节点
+│   │   ├── Registration.h        # 帧间配准
+│   │   ├── EpipolarGeometry.h    # 本质矩阵验证
+│   │   ├── Odometry.h            # 视觉里程计
+│   │   ├── Optimizer.h           # 图优化（g2o/GTSAM）
+│   │   └── Parameters.h          # 所有参数定义
+│   └── src/                      # ~60 个 .cpp 实现文件
 
-适用场景:
-- 首次探索新环境
-- 环境发生变化后重新建图
+rtabmap_ros/                       # ROS 2 封装
+├── rtabmap_slam/
+│   ├── src/
+│   │   ├── CoreWrapper.cpp       # ★ ROS2 Node 实现 (~2000+ 行)
+│   │   └── CoreNode.cpp          # main() 入口
+│   ├── include/rtabmap_slam/
+│   │   └── CoreWrapper.h         # 类声明 (~700+ 行)
+│   └── launch/
+├── rtabmap_msgs/                  # 自定义消息/服务
+├── rtabmap_sync/                  # CommonDataSubscriber — 数据同步
+└── rtabmap_viz/                   # 3D 可视化
 ```
 
-#### 2.2.2 Localization 模式 (定位)
-
-**参数:** `localization:=true`
+### 2.1.2 核心类关系
 
 ```
-功能:
-- 在已有地图中定位
-- 不创建新节点
-- 重定位到已有地图适用场景:
-- 已建图环境的导航
-- 多次运行同一环境
+CoreWrapper (ROS2 Node, rclcpp::Node)
+  ├── rtabmap::Rtabmap          ← 核心 SLAM 引擎
+  │   ├── rtabmap::Memory       ← 三层记忆管理
+  │   │   ├── Signature         ← 地图节点
+  │   │   ├── VWDictionary      ← 视觉词典 (BoW)
+  │   │   └── Registration      ← 帧间配准
+  │   ├── rtabmap::BayesFilter  ← 回环概率模型
+  │   ├── rtabmap::Optimizer    ← 图优化 (g2o/GTSAM)
+  │   └── rtabmap_util::MapsManager ← 地图发布
+  ├── rtabmap_sync::CommonDataSubscriber ← 数据同步
+  └── tf2_ros::TransformBroadcaster ← TF 发布
 ```
+
+### 2.1.3 异步处理架构
+
+```cpp
+// CoreWrapper 使用 callback_group 隔离不同执行流
+processingCallbackGroup_ → syncTimer_ → processAsync() → process()
+                                                      ↓
+                                              rtabmap_.process(data, ...)
+                                                      ↓
+                                          Memory::update() → 创建节点
+                                          computeLikelihood() → BoW 相似度
+                                          BayesFilter → 后验概率
+                                          EpipolarGeometry → 几何验证
+                                          Optimizer → GTSAM 图优化
+                                          MapsManager → 发布地图
+```
+
+**关键设计**: 传感器回调、TF 广播、处理逻辑使用不同 `callback_group`，确保**不互相阻塞**。
+
+### 2.1.4 RtabmapThread — 处理线程
+
+```cpp
+// 生产者-消费者模式
+// 数据流入:
+SensorEvent/OdometryEvent → handleEvent() → addData() → _dataBuffer (deque)
+
+// 数据流出:
+_dataBuffer → getData() → process() → _rtabmap->process(data, odom, ...)
+```
+
+**状态机**: `kStateDetecting` (处理传感器数据) → `kStateProcessCommand` (处理控制命令)
+
+**速率控制**: 检测率限制（`Rtabmap/DetectionRate`），跳过过快帧。
 
 ---
 
-### 2.3 配置文件详解
+### 2.2 核心算法 — Rtabmap::process() 流水线
 
-**默认配置:** `/opt/ros/humble/share/factor_perception/config/rtabmap.ini`
-
-#### 2.3.1 关键参数分类
-
-| 类别 | 参数前缀 | 说明 |
-|------|----------|------|
-| 地图生成 | `Grid/`, `GridGlobal/` | 2D 占据地图配置 |
-| 闭环检测 | `Kp/`, `Vh/` | 特征匹配和视觉词袋 |
-| 内存管理 | `Mem/` | 节点存储和管理 |
-| 优化 | `Optimizer/` | 图优化和位姿优化 |
-
-#### 2.3.2 Grid 参数详解
-
-**推荐修改的参数:**
-
-| 参数 | 默认值 | 说明 | 调整建议 |
-|------|--------|------|----------|
-| `Grid/CellSize` | 0.05m | 地图分辨率 | 人形机器人建议 0.02-0.05m |
-| `Grid/RangeMin` | 0.0m | 最小深度范围 | 过滤近距离噪声 |
-| `Grid/RangeMax` | 5.0m | 最大深度范围 | 根据传感器有效范围调整 |
-| `Grid/MaxObstacleHeight` | 2.0m | 最大障碍物高度 | 根据机器人高度调整 |
-| `Grid/MinGroundHeight` | 0.0m | 最小地面高度 | 根据地面实际情况调整 |
-| `Grid/NormalsK` | 20 | 法向量计算邻居数 | 影响地面检测精度 |
-
-**示例配置:**
-```ini
-# 人形机器人推荐配置
-Grid/CellSize=0.03       # 更高分辨率
-Grid/RangeMin=0.3        # 过滤近距离
-Grid/RangeMax=3.0        # 深度传感器有效范围
-Grid/MaxObstacleHeight=1.5  # 障碍物高度上限
+```
+输入: RGBD Image + Odometry
+  │
+  ├─[1] Memory::update() — 创建新节点 (Signature)
+  │    ├── 特征提取 (ORB/SIFT/SUPERPOINT)
+  │    ├── 创建 Signature（含特征、深度、位姿）
+  │    ├── 添加到 STM（短期记忆）
+  │    └── Rehearsal（记忆巩固：相似节点合并）
+  │
+  ├─[2] 局部回环检测 — 时间维度 (ProximityByTime)
+  │    └── 检查 STM 中时间相近的节点
+  │
+  ├─[3] 计算似然 (computeLikelihood)
+  │    ├── BoW 相似度（TF-IDF 加权）
+  │    └── 返回每个候选节点的似然值
+  │
+  ├─[4] BayesFilter::computePosterior()
+  │    ├── 贝叶斯预测（运动模型）
+  │    └── 似然更新 → 后验概率分布
+  │
+  ├─[5] 回环假设选择
+  │    ├── 取最高后验概率的节点
+  │    ├── 阈值判断: posterior >= LoopThr (0.11)
+  │    └── 几何验证: EpipolarGeometry / RANSAC
+  │
+  ├─[6] 图优化 (Optimizer)
+  │    ├── 验证通过 → 添加 Loop Closure Link
+  │    └── g2o / GTSAM (iSAM2) 增量优化
+  │
+  └─[7] 发布结果
+       ├── mapData / mapGraph（地图数据）
+       ├── cloud_map / cloud_obstacles（点云）
+       ├── odom → base_link TF
+       └── 2D OccupancyGrid (用于 Nav2)
 ```
 
-#### 2.3.3 GridGlobal 参数详解
+**源码级回环验证流程:**
+```cpp
+// 1. 计算似然
+rawLikelihood = _memory->computeLikelihood(signature, signaturesToCompare);
+likelihood = adjustLikelihood(rawLikelihood);
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `GridGlobal/MinClusterSize` | 20 | 最小聚类尺寸 (节点数) |
-| `GridGlobal/Eroded` | false | 是否腐蚀地图边缘 |
-| `GridGlobal/FillEmptyCells` | false | 填充空白区域 |
+// 2. 贝叶斯后验
+posterior = _bayesFilter->computePosterior(_memory, likelihood);
+
+// 3. 取最高概率假设（减去虚拟位置）
+_highestHypothesis = 1 - posterior.begin()->second;
+
+// 4. 阈值判断
+if (_highestHypothesis.second >= loopThr) {
+    // 5. 几何验证
+    if (_verifyLoopClosureHypothesis) {
+        _epipolarGeometry->check(signature, candidateSignature);
+    }
+    // 6. 创建回环链接 → 7. 图优化
+}
+```
+
+### 2.3 三层记忆系统（Memory Management）
+
+```
+┌──────────────────────────────────────────────────┐
+│                 STM (短期记忆)                      │
+│  _stMem: set<int>, 大小 = Mem\STMSize (默认 10)    │
+│  - 最近访问的 N 个节点                              │
+│  - 快速访问，全量数据在 RAM                         │
+└──────────────────────┬───────────────────────────┘
+                       │ Rehearsal (相似度 ≥ 0.9)
+                       ▼
+┌──────────────────────────────────────────────────┐
+│                 WM (工作记忆)                       │
+│  _workingMem: map<int, double> (id → 年龄)         │
+│  - 经过巩固的重要节点                               │
+│  - 大小 = Mem\RecentWmRatio × STM 大小             │
+└──────────────────────┬───────────────────────────┘
+                       │ reduceGraph / 压缩
+                       ▼
+┌──────────────────────────────────────────────────┐
+│                 LTM (长期记忆)                      │
+│  存储在 SQLite 数据库 (~/rtabmap.db)               │
+│  - 容量无限（磁盘存储）                             │
+│  - 按需加载（回环检测时加载候选节点）                 │
+└──────────────────────────────────────────────────┘
+```
+
+**Rehearsal（记忆巩固）:**
+```cpp
+// 当新节点与 STM 中某节点相似度 ≥ _rehearsalSimilarity (0.9)
+// → 合并两个节点（将新节点的观察转移到旧节点）
+void rehearsal(Signature* signature, Statistics* stats)
+```
+
+### 2.4 ROS 2 集成 — CoreWrapper
+
+**关键话题:**
+
+| 话题 | 消息类型 | 用途 |
+|------|---------|------|
+| `/factor_perception/rtabmap/grid_map` | `nav_msgs/OccupancyGrid` | **2D 占据网格（Nav2 用）** |
+| `/factor_perception/rtabmap/cloud_obstacles` | `sensor_msgs/PointCloud2` | 障碍物点云 |
+| `/factor_perception/rtabmap/cloud_map` | `sensor_msgs/PointCloud2` | 3D 地图点云 |
+| `/factor_perception/rtabmap/odom` | `nav_msgs/Odometry` | 里程计 |
+| `/factor_perception/rtabmap/octomap` | `octomap_msgs/OctomapWithPose` | 3D Octomap |
+
+**关键服务:**
+
+| 服务 | 功能 |
+|------|------|
+| `/rtabmap/reset` | 重置内存 |
+| `/rtabmap/set_mode_localization` | 切换定位模式 |
+| `/rtabmap/set_mode_mapping` | 切换建图模式 |
+| `/rtabmap/detect_more_loop_closures` | 强制检测回环 |
+
+**TF 发布行为:**
+```cpp
+// CoreWrapper 内部发布 map → odom TF
+// 注意：当 graph optimization 启用时才有 map → odom TF 的修正
+```
+
+### 2.5 关键参数详解
+
+#### 2.5.1 回环检测参数
+
+| 参数 | 含义 | 源码位置 |
+|------|------|---------|
+| `Rtabmap/LoopThr` | 回环相似度阈值（越低越严格） | Rtabmap::process() |
+| `Kp/NndrRatio` | 特征匹配 Lowe's 比率 | Memory::computeLikelihood() |
+| `Vis/CorNNDR` | 视觉相关 NNDR | RegistrationVis |
+| `Vis/MinInliers` | RANSAC 最小内点数 | EpipolarGeometry |
+| `Bayes/PredictionLC` | 贝叶斯转移概率矩阵 | BayesFilter |
+
+#### 2.5.2 记忆管理参数
+
+| 参数 | 含义 | 源码位置 |
+|------|------|---------|
+| `Mem/STMSize` | 短期记忆大小 | Memory::addSignatureToStm() |
+| `Mem/IncrementalMemory` | 增量记忆（SLAM）/ 只读（定位） | Memory::update() |
+| `Mem/InitWMWithAllNodes` | 初始化时加载所有节点 | Memory::init() |
+| `Mem/RehearsalSimilarity` | 记忆巩固相似度阈值 | Memory::rehearsal() |
+| `Mem/ReduceGraph` | 图缩减（保持 STM 大小） | Memory::cleanup() |
+
+#### 2.5.3 3D 建图参数
+
+| 参数 | 含义 | 源码位置 |
+|------|------|---------|
+| `Grid/3D` | 启用 3D 网格 | LocalGridMaker |
+| `Grid/CellSize` | 体素大小 | OccupancyGrid |
+| `Grid/MaxObstacleHeight` | 障碍物最大高度 | Grid::filterByHeight() |
+| `Grid/FootprintHeight` | 机器人高度 | Grid::setFootprint() |
+| `Grid/FootprintRadius` | 机器人半径 | Grid::setFootprint() |
+
+### 2.6 工程评估与调参建议
+
+| 方面 | 评价 | 说明 |
+|------|------|------|
+| subscribe_rgbd | ✅ 正确 | Factor Perception 预同步数据，单订阅零拷贝 |
+| Grid/3D = true | ✅ 正确 | 启用 3D 建图，障碍物点云正确生成 |
+| GTSAM 增量优化 | ✅ 正确 | 实时性好，适合嵌入式 |
+| RehearsalSimilarity = 0.9 | ✅ 正确 | 较严格的巩固阈值，避免错误合并 |
+
+| 参数 | 当前值 | 建议 | 原因 |
+|------|--------|------|------|
+| `Rtabmap/LoopThr` | 0.11 | 考虑 0.15-0.20 | 低纹理环境容易误回环 |
+| `Kp/NndrRatio` | 0.8 | 考虑 0.7 | 与 LoopThr 配合，减少误匹配 |
+| `Grid/FootprintHeight` | 1.4 | 根据实际相机高度调整 | 影响障碍物过滤 |
+| `Grid/FootprintRadius` | 0.5 | 根据实际机器人尺寸调整 | 影响 footprint 计算 |
 
 ---
 
-### 2.4 数据库管理
+## 3. Nav2 Costmap 配置详解
 
-#### 2.4.1 数据库结构
-
-**存储位置:** `database_path` 参数控制
-- 默认: `~/rtabmap.db`
-- Factor Perceptionlaunch 文件改为: `~/rtabmap.db`
-
-**数据库内容:**
-```
-- 节点
-  - 关键帧图像
-  - 特征点和描述符
-  - 位姿估计
-  
-- 链接
-  - 相邻节点链接
-  - 闭环链接
-  
-- 地图数据
-  - 2D 占据地图
-  - 3D 点云
-```
-
-#### 2.4.2 多 Session 管理
-
-**Session 概念:**
-```
-每次启动系统 = 一个 Session
-- 使用同一数据库会创建新 Session
-- RTAB-Map 自动尝试匹配和合并 Sessions
-- 实现 incremental mapping 和 lifelong SLAM
-```
-
-**管理建议:**
-```
-不要在同一数据库中存储不同区域的地图
-- 除非它们后续可以合并
-- 使用不同数据库文件管理不同区域
-```
-
-#### 2.4.3 数据库工具
-
-**rtabmap-databaseViewer:**
-```bash
-# 打开数据库查看器
-rtabmap-databaseViewer ~/rtabmap.db
-
-功能:
-- 浏览地图节点
-- 查看 3D 点云
-- 查看关键帧图像
-- 离线优化地图
-- 导出地图
-- 3D重建
-```
-
----
-
-### 2.5 地图输出格式
-
-#### 2.5.1 2D 占据地图 (OccupancyGrid)
-
-**话题:** `/factor_perception/grid_map`
-
-**特点:**
-- 二值地图 (占用/空闲)
-- 用于 Nav2 导航
-- 与 AMCL 兼容
-
-#### 2.5.2 2.5D 地图 (GridMap)
-
-**话题:** `/factor_perception/grid_map`
-
-**特点:**
-- 多层地图 (海拔、障碍物等)
-- 支持多层信息叠加
-- 用于复杂导航场景
-
-#### 2.5.3 3D 地图 (OctoMap)
-
-**话题:** `/factor_perception/octomap`
-
-**特点:**
-- 八叉树 3D 表示
-- 高效存储
-- 用于 3D 导航和避障
-
----
-
-### 2.6 闭环检测机制
-
-#### 2.6.1 原理
-
-```
-闭环检测流程:
-1. 提取当前帧全局描述符 (HF-Net)
-2. 与数据库中的帧进行匹配
-3. 验证几何一致性
-4. 创建闭环链接
-5. 执行图优化
-```
-
-#### 2.6.2 HF-Net 优势
-
-```
-HF-Net = Hybrid Feature Network
-- 局部特征提取 (关键点)
-- 全局描述符 (位置识别)
-- 相机内推理，不占用主机资源
-- 更鲁棒的闭环检测
-```
-
----
-
-### 2.7 与 Nav2 集成
-
-#### 2.7.1 TF 树
-
-```
-SLAM 模式:
-map└── odom (RTAB-Map 发布)
-    └── base_link (Factor-VIO 发布)└── oak_base_frame
-
-Localization 模式:
-map└── odom (RTAB-Map 发布)
-    └── base_link (Factor-VIO 发布)
-```
-
-#### 2.7.2 地图话题对应
-
-| RTAB-Map 话题 | Nav2 使用 |
-|--------------|-----------|
-| `/factor_perception/grid_map` | `global_costmap` 输入 |
-| `/factor_perception/octomap` | 3D 避障 (可选) |
-
-#### 2.7.3 Nav2 参数配置
-
-```yaml
-global_costmap:
-  global_costmap:
-    ros__parameters:
-      global_frame: map
-      robot_base_frame: base_link
-      
-      # 使用 RTAB-Map 地图
-      plugins: ["static_layer"]
-      
-      static_layer:
-        plugin: "nav2_costmap_2d::StaticLayer"
-        map_topic: /factor_perception/grid_map
-```
-
----
-
-### 2.8 调试与优化
-
-#### 2.8.1查看所有参数
-
-```bash
-ros2 run rtabmap_slam rtabmap --params
-```
-
-#### 2.8.2 常见问题
-
-| 问题 | 原因 | 解决方案 |
-|------|------|----------|
-| 闭环检测失败 | 特征不足 | 增加 HF-Net.blob |
-| 地图漂移 | VIO 精度低 | 检查 IMU 校准 |
-| 地图不更新 | 内存管理限制 | 调整 Mem/参数 |
-| 高 CPU 占用 | Grid 分辨率高 | 降低 Grid/CellSize |
-
----
-
-## 4. Nav2 Costmap 配置详解
-
-### 4.1 核心参数说明
+### 3.1 核心参数说明
 
 #### 4.1.1 机器人 Footprint
 
@@ -725,7 +726,7 @@ ros2 service call /global_costmap/clear_entirely_global_costmap/nav2_msgs/srv/Cl
 
 ---
 
-## 5. 硬件知识
+## 4. 硬件知识
 
 ### 1.1 OAK-D Pro 相机
 
@@ -771,7 +772,7 @@ htop  # 查看 CPU 使用
 
 ---
 
-## 2. 软件知识
+## 5. 软件知识
 
 ### 2.1 Factor Perception SDK
 
@@ -825,7 +826,7 @@ htop  # 查看 CPU 使用
 
 ---
 
-## 3. 运维知识
+## 6. 运维知识
 
 ### 3.1 启动顺序
 
@@ -872,7 +873,7 @@ htop
 
 ---
 
-## 4. 故障知识
+## 7. 故障知识
 
 ### 4.1 常见问题
 
@@ -922,7 +923,7 @@ htop
 
 ---
 
-## 5. 最佳实践
+## 8. 最佳实践
 
 ### 5.1 开发流程
 

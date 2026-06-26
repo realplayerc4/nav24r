@@ -10,6 +10,8 @@ import subprocess
 import os
 import json
 import logging
+import re
+import shutil
 import yaml
 from datetime import datetime
 import glob
@@ -17,12 +19,31 @@ import threading
 import time
 
 # 配置日志
+LOG_DIR = os.path.expanduser("~/.local/share/nav24r/logs")
+os.makedirs(LOG_DIR, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    filename='/tmp/factor_control_panel.log'
+    filename=os.path.join(LOG_DIR, 'factor_control_panel.log')
 )
 logger = logging.getLogger(__name__)
+
+# 地图 ID 白名单校验：只允许字母、数字、下划线、连字符
+MAP_ID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+
+# 地图回收站目录
+TRASH_DIR = os.path.expanduser("~/.local/share/nav24r/trash/maps")
+
+
+def validate_map_id(map_id):
+    """校验地图 ID，防止命令注入"""
+    if not map_id:
+        return False, "地图ID不能为空"
+    if not MAP_ID_PATTERN.match(map_id):
+        return False, "地图ID只能包含字母、数字、下划线和连字符"
+    if len(map_id) > 128:
+        return False, "地图ID过长（最多128字符）"
+    return True, ""
 
 class FactorControlPanel:
     def __init__(self, root):
@@ -41,7 +62,10 @@ class FactorControlPanel:
         self.device_check_thread = None
         self.auto_check_enabled = True
 
-        self.config_file = "/home/yq/nav24r/config/maps_config.json"
+        # 动态解析项目根目录（脚本在 scripts/ 下，向上一级即为项目根）
+        _script_dir = os.path.dirname(os.path.abspath(__file__))
+        _project_root = os.path.dirname(_script_dir)
+        self.config_file = os.path.join(_project_root, "config", "maps_config.json")
         self.maps_dir = os.path.expanduser("~/rtabmap_maps")
 
         self.load_config()
@@ -52,24 +76,45 @@ class FactorControlPanel:
 
     def load_app_config(self):
         """加载应用配置文件"""
-        config_path = "/home/yq/nav24r/config/factor_perception_config.yaml"
+        # 动态定位配置文件：scripts/ -> project_root -> config/
+        _script_dir = os.path.dirname(os.path.abspath(__file__))
+        _project_root = os.path.dirname(_script_dir)
+        config_path = os.path.join(_project_root, "config", "factor_perception_config.yaml")
         try:
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     self.app_config = yaml.safe_load(f)
-                logger.info(f"配置文件加载成功: {config_path}")
+                # 用动态计算的路径覆盖配置文件中可能存在的硬编码路径
+                if 'paths' not in self.app_config:
+                    self.app_config['paths'] = {}
+                self.app_config['paths']['project_root'] = _project_root
+                self.app_config['paths']['config_dir'] = os.path.join(_project_root, 'config')
+                self.app_config['paths']['scripts_dir'] = _script_dir
+                logger.info(f"配置文件加载成功: {config_path}, project_root={_project_root}")
             else:
                 # 默认配置
                 self.app_config = {
-                    'camera': {'key': '12D0C1E7D1AB466C09BD9AE6427D5240'},
-                    'ros': {'distro': 'jazzy', 'setup_path': '/opt/ros/jazzy/setup.bash'}
+                    'camera': {'key': os.environ.get('FACTOR_PERCEPTION_KEY', '')},
+                    'ros': {'distro': 'jazzy', 'setup_path': '/opt/ros/jazzy/setup.bash'},
+                    'paths': {
+                        'project_root': _project_root,
+                        'config_dir': os.path.join(_project_root, 'config'),
+                        'scripts_dir': _script_dir,
+                    }
                 }
-                logger.warning("配置文件不存在，使用默认配置")
+                logger.warning("配置文件不存在，使用动态默认配置（camera.key 从 FACTOR_PERCEPTION_KEY 环境变量读取）")
+                if not self.app_config['camera']['key']:
+                    logger.error("FACTOR_PERCEPTION_KEY 环境变量未设置，相机密钥为空！请设置环境变量后重试")
         except Exception as e:
             logger.error(f"加载配置文件失败: {e}")
             self.app_config = {
-                'camera': {'key': '12D0C1E7D1AB466C09BD9AE6427D5240'},
-                'ros': {'distro': 'jazzy', 'setup_path': '/opt/ros/jazzy/setup.bash'}
+                'camera': {'key': os.environ.get('FACTOR_PERCEPTION_KEY', '')},
+                'ros': {'distro': 'jazzy', 'setup_path': '/opt/ros/jazzy/setup.bash'},
+                'paths': {
+                    'project_root': _project_root,
+                    'config_dir': os.path.join(_project_root, 'config'),
+                    'scripts_dir': _script_dir,
+                }
             }
 
     def load_config(self):
@@ -250,13 +295,27 @@ class FactorControlPanel:
         if name == "default":
             messagebox.showerror("错误", "不能删除默认地图")
             return
+        # 校验地图名称
+        valid, msg = validate_map_id(name)
+        if not valid:
+            messagebox.showerror("错误", msg)
+            return
         if not messagebox.askyesno("确认", f"删除地图 '{name}'?"):
             return
         db_path = self.get_db_path(name)
         if os.path.exists(db_path):
-            os.remove(db_path)
+            # C5 安全修复：移动到回收站而非直接删除
+            os.makedirs(TRASH_DIR, exist_ok=True)
+            trash_path = os.path.join(TRASH_DIR, f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+            try:
+                shutil.move(db_path, trash_path)
+                logger.info(f"地图已移至回收站: {name} -> {trash_path}")
+            except Exception as e:
+                logger.error(f"移动地图到回收站失败: {e}")
+                messagebox.showerror("错误", f"删除失败: {str(e)}")
+                return
         self.refresh_maps()
-        self.status_var.set(f"状态: 已删除 '{name}'")
+        self.status_var.set(f"状态: 已移至回收站 '{name}'")
 
     def start_mapping(self):
         """开始建图"""
@@ -269,24 +328,37 @@ class FactorControlPanel:
             if not map_id:
                 messagebox.showerror("错误", "请输入地图ID")
                 return
+            # C2 安全修复：校验地图ID，防止命令注入
+            valid, msg = validate_map_id(map_id)
+            if not valid:
+                messagebox.showerror("错误", msg)
+                return
             db_path = self.get_db_path(map_id)
             ros_setup = self.app_config['ros']['setup_path']
             camera_key = self.app_config['camera']['key']
             project_root = self.app_config['paths']['project_root']
+            config_dir = self.app_config['paths']['config_dir']
+            config_path = os.path.join(config_dir, 'rtabmap_custom.ini')
+
+            launch_file = f"{project_root}/factor_perception_auto.launch.py"
 
             # 判断是否为续建模式
             if self.is_continue and os.path.exists(db_path):
                 # 续建：加载已有地图数据继续建图
-                cmd = f"bash -c 'source {ros_setup} && ros2 launch {project_root}/factor_perception_auto.launch.py localization:=false rtabmap_viz:=true database_path:={db_path} key:={camera_key} continue_mapping:=true'"
+                cmd = ['bash', '-c', f'source {ros_setup} && ros2 launch {launch_file} '
+                       f'localization:=false rtabmap_viz:=true database_path:={db_path} '
+                       f'key:={camera_key} config_path:={config_path} continue_mapping:=true']
                 self.status_var.set(f"状态: 续建模式 | {map_id} (加载已有地图)")
                 logger.info(f"启动续建模式: {map_id}, 数据库: {db_path}")
             else:
                 # 新建图
-                cmd = f"bash -c 'source {ros_setup} && ros2 launch {project_root}/factor_perception_auto.launch.py localization:=false rtabmap_viz:=true database_path:={db_path} key:={camera_key}'"
+                cmd = ['bash', '-c', f'source {ros_setup} && ros2 launch {launch_file} '
+                       f'localization:=false rtabmap_viz:=true database_path:={db_path} '
+                       f'key:={camera_key} config_path:={config_path}']
                 self.status_var.set(f"状态: 建图模式 | {map_id}")
                 logger.info(f"启动建图模式: {map_id}, 数据库: {db_path}")
 
-            subprocess.Popen(cmd, shell=True)
+            subprocess.Popen(cmd, shell=False)
             # 重置续建标记
             self.is_continue = False
             self.continue_var.set("")
@@ -305,6 +377,11 @@ class FactorControlPanel:
             if not name:
                 messagebox.showerror("错误", "请选择地图")
                 return
+            # C2 安全修复：校验地图名称
+            valid, msg = validate_map_id(name)
+            if not valid:
+                messagebox.showerror("错误", msg)
+                return
             db_path = self.get_db_path(name)
             if not db_path:
                 messagebox.showerror("错误", "无法获取地图路径")
@@ -315,8 +392,13 @@ class FactorControlPanel:
             self.status_var.set(f"状态: 启动导航 {name}...")
             ros_setup = self.app_config['ros']['setup_path']
             camera_key = self.app_config['camera']['key']
-            cmd = f"bash -c 'source {ros_setup} && ros2 launch /home/yq/nav24r/factor_perception_auto.launch.py localization:=true rtabmap_viz:=true database_path:={db_path} key:={camera_key}'"
-            subprocess.Popen(cmd, shell=True)
+            project_root = self.app_config['paths']['project_root']
+            config_path = os.path.join(self.app_config['paths']['config_dir'], 'rtabmap_custom.ini')
+            launch_file = f"{project_root}/factor_perception_auto.launch.py"
+            cmd = ['bash', '-c', f'source {ros_setup} && ros2 launch {launch_file} '
+                   f'localization:=true rtabmap_viz:=true database_path:={db_path} '
+                   f'key:={camera_key} config_path:={config_path}']
+            subprocess.Popen(cmd, shell=False)
             self.status_var.set(f"状态: 导航模式 | {name}")
             logger.info(f"启动导航模式: {name}, 数据库: {db_path}")
         except Exception as e:
@@ -328,35 +410,50 @@ class FactorControlPanel:
         if not name:
             messagebox.showerror("错误", "请选择地图")
             return
+        # C2 安全修复：校验地图名称
+        valid, msg = validate_map_id(name)
+        if not valid:
+            messagebox.showerror("错误", msg)
+            return
         db_path = self.get_db_path(name)
         if not os.path.exists(db_path):
             messagebox.showerror("错误", "地图不存在")
             return
         ros_setup = self.app_config['ros']['setup_path']
+        camera_key = self.app_config['camera']['key']
         project_root = self.app_config['paths']['project_root']
-        cmd = f"bash -c 'source {ros_setup} && ros2 launch {project_root}/launch/nav24r_full.launch.py database_path:={db_path} key:={camera_key}'"
-        subprocess.Popen(cmd, shell=True)
+        config_dir = self.app_config['paths']['config_dir']
+        config_path = os.path.join(config_dir, 'rtabmap_custom.ini')
+        nav2_params = os.path.join(config_dir, 'nav2_params.yaml')
+        launch_file = f"{project_root}/launch/nav24r_full.launch.py"
+        cmd = ['bash', '-c', f'source {ros_setup} && ros2 launch {launch_file} '
+               f'database_path:={db_path} key:={camera_key} '
+               f'config_path:={config_path} nav2_params_file:={nav2_params}']
+        subprocess.Popen(cmd, shell=False)
         self.status_var.set(f"状态: 完整导航 | {name}")
 
     def launch_rviz(self):
         """启动 RViz（顶视角配置）"""
         ros_setup = self.app_config['ros']['setup_path']
         config_dir = self.app_config['paths']['config_dir']
-        subprocess.Popen(f"bash -c 'source {ros_setup} && rviz2 -d {config_dir}/mapping.rviz'", shell=True, start_new_session=True)
+        subprocess.Popen(['bash', '-c', f'source {ros_setup} && rviz2 -d {config_dir}/mapping.rviz'],
+                         shell=False, start_new_session=True)
         self.status_var.set("状态: RViz 已启动（顶视角）")
 
     def launch_rviz_3d(self):
         """启动 RViz（3D 视角配置）"""
         ros_setup = self.app_config['ros']['setup_path']
         config_dir = self.app_config['paths']['config_dir']
-        subprocess.Popen(f"bash -c 'source {ros_setup} && rviz2 -d {config_dir}/mapping_3d.rviz'", shell=True, start_new_session=True)
+        subprocess.Popen(['bash', '-c', f'source {ros_setup} && rviz2 -d {config_dir}/mapping_3d.rviz'],
+                         shell=False, start_new_session=True)
         self.status_var.set("状态: RViz 3D 已启动（多视角）")
 
     def launch_map_viewer(self):
         """启动地图观察器（专门用于查看已建好的地图）"""
         ros_setup = self.app_config['ros']['setup_path']
         config_dir = self.app_config['paths']['config_dir']
-        subprocess.Popen(f"bash -c 'source {ros_setup} && rviz2 -d {config_dir}/map_viewer_3d.rviz'", shell=True, start_new_session=True)
+        subprocess.Popen(['bash', '-c', f'source {ros_setup} && rviz2 -d {config_dir}/map_viewer_3d.rviz'],
+                         shell=False, start_new_session=True)
         self.status_var.set("状态: 地图观察器已启动（3D 查看器）")
 
     def view_map_only(self):
@@ -376,15 +473,15 @@ class FactorControlPanel:
             camera_key = self.app_config['camera']['key']
 
             # 启动 RTAB-Map 定位模式（只读地图）
-            cmd = f"bash -c 'source {ros_setup} && ros2 launch factor_perception factor_perception_launch.py localization:=true database_path:={db_path} key:={camera_key}'"
-            subprocess.Popen(cmd, shell=True)
+            cmd = ['bash', '-c', f'source {ros_setup} && ros2 launch factor_perception factor_perception_launch.py localization:=true database_path:={db_path} key:={camera_key}']
+            subprocess.Popen(cmd, shell=False)
 
             # 等待 2 秒后启动 RViz 观察器
-            import time
             time.sleep(2)
 
             # 启动地图观察器
-            subprocess.Popen(f"bash -c 'source {ros_setup} && rviz2 -d /home/yq/nav24r/config/map_viewer_3d.rviz'", shell=True)
+            config_dir = self.app_config['paths']['config_dir']
+            subprocess.Popen(['bash', '-c', f'source {ros_setup} && rviz2 -d {config_dir}/map_viewer_3d.rviz'], shell=False)
 
             self.status_var.set(f"状态: 正在查看地图 '{name}'")
             logger.info(f"查看地图: {name}")
@@ -408,7 +505,7 @@ class FactorControlPanel:
 
         # 运行分析脚本
         result = subprocess.run(
-            ['python3', '/home/yq/nav24r/scripts/analyze_map_quality.py', db_path],
+            ['python3', os.path.join(self.app_config['paths']['scripts_dir'], 'analyze_map_quality.py'), db_path],
             capture_output=True,
             text=True
         )
@@ -564,8 +661,7 @@ class FactorControlPanel:
         # 启动 Database Viewer 按钮
         def launch_db_viewer():
             try:
-                cmd = f"rtabmap-databaseViewer {db_path}"
-                subprocess.Popen(cmd, shell=True, start_new_session=True)
+                subprocess.Popen(['rtabmap-databaseViewer', db_path], shell=False, start_new_session=True)
                 self.status_var.set(f"状态: Database Viewer 已启动 | {name}")
                 logger.info(f"启动 Database Viewer: {db_path}")
                 messagebox.showinfo("成功",
@@ -624,8 +720,7 @@ class FactorControlPanel:
 
         try:
             # 使用 subprocess.Popen 启动，不等待完成
-            cmd = f"rtabmap-databaseViewer {db_path}"
-            subprocess.Popen(cmd, shell=True, start_new_session=True)
+            subprocess.Popen(['rtabmap-databaseViewer', db_path], shell=False, start_new_session=True)
             self.status_var.set(f"状态: Database Viewer 已启动 | {name}")
             logger.info(f"启动 Database Viewer: {db_path}")
         except Exception as e:
@@ -636,24 +731,24 @@ class FactorControlPanel:
     def stop_all(self):
         """停止所有 ROS2 进程和 RTAB-Map 相关窗口"""
         # 停止 ROS2 launch 进程
-        subprocess.run("pkill -f 'ros2 launch'", shell=True)
+        subprocess.run(['pkill', '-f', 'ros2 launch'], stderr=subprocess.DEVNULL)
 
         # 停止 RViz
-        subprocess.run("pkill -f rviz2", shell=True)
+        subprocess.run(['pkill', '-f', 'rviz2'], stderr=subprocess.DEVNULL)
 
         # 停止 RTAB-Map 相关进程和窗口
-        subprocess.run("pkill -f rtabmap", shell=True)  # RTAB-Map 核心进程
-        subprocess.run("pkill -f 'rtabmap-databaseViewer'", shell=True)  # 数据库查看器
-        subprocess.run("pkill -f 'rtabmap_viz'", shell=True)  # 可视化节点
+        subprocess.run(['pkill', '-f', 'rtabmap'], stderr=subprocess.DEVNULL)  # RTAB-Map 核心进程
+        subprocess.run(['pkill', '-f', 'rtabmap-databaseViewer'], stderr=subprocess.DEVNULL)  # 数据库查看器
+        subprocess.run(['pkill', '-f', 'rtabmap_viz'], stderr=subprocess.DEVNULL)  # 可视化节点
 
         # 停止 Factor Perception 容器
-        subprocess.run("pkill -f 'component_container'", shell=True)
+        subprocess.run(['pkill', '-f', 'component_container'], stderr=subprocess.DEVNULL)
 
         # 停止 robot_state_publisher
-        subprocess.run("pkill -f 'robot_state_publisher'", shell=True)
+        subprocess.run(['pkill', '-f', 'robot_state_publisher'], stderr=subprocess.DEVNULL)
 
         # 清理可能的僵尸进程
-        subprocess.run("pkill -9 -f 'factor_perception'", shell=True)
+        subprocess.run(['pkill', '-9', '-f', 'factor_perception'], stderr=subprocess.DEVNULL)
 
         self.status_var.set("状态: 已停止所有进程")
 
@@ -784,8 +879,8 @@ class FactorControlPanel:
             # 重置 USB 设备（软重启）
             # 查找 OAK-D 设备的 USB 路径
             result = subprocess.run(
-                "lsusb | grep -iE '03e7|1443|luxonis' | head -1",
-                shell=True, capture_output=True, text=True, timeout=5
+                ['bash', '-c', "lsusb | grep -iE '03e7|1443|luxonis' | head -1"],
+                shell=False, capture_output=True, text=True, timeout=5
             )
 
             if result.stdout:
@@ -803,7 +898,7 @@ for dev in /sys/bus/usb/devices/*; do
     fi
 done
 """
-                subprocess.run(reset_cmd, shell=True, timeout=10)
+                subprocess.run(['bash', '-c', reset_cmd], shell=False, timeout=10)
 
                 # 等待设备重新枚举
                 time.sleep(2)
@@ -862,7 +957,7 @@ for dev in /sys/bus/usb/devices/*; do
     fi
 done
 """
-            subprocess.run(reset_cmd, shell=True, timeout=15)
+            subprocess.run(['bash', '-c', reset_cmd], shell=False, timeout=15)
 
             # 步骤3: 等待设备重新枚举
             time.sleep(3)

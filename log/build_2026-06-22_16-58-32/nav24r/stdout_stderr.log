@@ -1,0 +1,40 @@
+running develop
+running egg_info
+creating nav24r.egg-info
+writing nav24r.egg-info/PKG-INFO
+writing dependency_links to nav24r.egg-info/dependency_links.txt
+writing requirements to nav24r.egg-info/requires.txt
+writing top-level names to nav24r.egg-info/top_level.txt
+writing manifest file 'nav24r.egg-info/SOURCES.txt'
+reading manifest file 'nav24r.egg-info/SOURCES.txt'
+writing manifest file 'nav24r.egg-info/SOURCES.txt'
+running build_ext
+Creating /home/yq/nav24r/install/nav24r/lib/python3.12/site-packages/nav24r.egg-link (link to .)
+
+Installed /home/yq/nav24r/build/nav24r
+running symlink_data
+creating /home/yq/nav24r/install/nav24r/share/ament_index
+creating /home/yq/nav24r/install/nav24r/share/ament_index/resource_index
+creating /home/yq/nav24r/install/nav24r/share/ament_index/resource_index/packages
+symbolically linking /home/yq/nav24r/build/nav24r/resource/nav24r -> /home/yq/nav24r/install/nav24r/share/ament_index/resource_index/packages
+symbolically linking /home/yq/nav24r/build/nav24r/package.xml -> /home/yq/nav24r/install/nav24r/share/nav24r
+creating /home/yq/nav24r/install/nav24r/share/nav24r/launch
+symbolically linking /home/yq/nav24r/build/nav24r/launch/factor_perception_isolated.launch.py -> /home/yq/nav24r/install/nav24r/share/nav24r/launch
+symbolically linking /home/yq/nav24r/build/nav24r/launch/nav2.launch.py -> /home/yq/nav24r/install/nav24r/share/nav24r/launch
+symbolically linking /home/yq/nav24r/build/nav24r/launch/nav24r_full.launch.py -> /home/yq/nav24r/install/nav24r/share/nav24r/launch
+symbolically linking /home/yq/nav24r/build/nav24r/factor_perception_auto.launch.py -> /home/yq/nav24r/install/nav24r/share/nav24r/launch
+creating /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/octomap.rviz -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/mapping_3d.rviz -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/rtabmap_custom.ini -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/octomap_3d.rviz -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/nav2_params.yaml -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/cyclonedds.xml -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/factor_perception_config.yaml -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/map_viewer_3d.rviz -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/mapping.rviz -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/rtabmap_config_doc.md -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/navigation.rviz -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/rtabmap_3d.ini -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/maps_config.json -> /home/yq/nav24r/install/nav24r/share/nav24r/config
+symbolically linking /home/yq/nav24r/build/nav24r/config/rtabmap_light.rviz -> /home/yq/nav24r/install/nav24r/share/nav24r/config

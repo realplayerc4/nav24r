@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: nav24r
+Version: 2.0.0
+Summary: 人形机器人自主导航系统 - ROS2 Jazzy + Factor Perception SDK + RTAB-Map + Nav2
+Maintainer: nav24r
+Maintainer-email: todo@example.com
+License: MIT

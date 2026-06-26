@@ -79,7 +79,10 @@ def export_octomap_ros_method(db_path, output_file, resolution):
 
     print("步骤 1: 启动 RTAB-Map 定位模式")
     print("─────────────────────────────────────")
-    cmd1 = f"ros2 launch factor_perception factor_perception_launch.py localization:=true database_path:={db_path} key:=12D0C1E7D1AB466C09BD9AE6427D5240"
+    camera_key = os.environ.get('FACTOR_PERCEPTION_KEY', '')
+    if not camera_key:
+        print("⚠️  FACTOR_PERCEPTION_KEY 环境变量未设置，请在环境变量中配置相机密钥")
+    cmd1 = f"ros2 launch factor_perception factor_perception_launch.py localization:=true database_path:={db_path} key:={camera_key}"
     print(f"  {cmd1}\n")
 
     print("步骤 2: 等待地图加载")

@@ -1,5 +1,9 @@
 # Factor Perception 配置文件
 # 用于管理敏感信息和常用配置
+#
+# 安全提示：相机密钥优先从环境变量 FACTOR_PERCEPTION_KEY 读取。
+# 如果环境变量已设置，以下配置中的密钥将被忽略。
+# 建议通过环境变量配置密钥：export FACTOR_PERCEPTION_KEY='your_key_here'
 
 # 相机配置
 camera:
@@ -33,10 +37,14 @@ maps:
 launch:
   depth_filter: true
   ir_intensity: 0.4
-  cam_pos_z: 0.5
+  cam_pos_z: 1.0
   publish_tf: true
 
 # 路径配置
+# 注意: 以下路径值仅作参考备用。
+# factor_control_panel.py 会自动用 __file__ 动态解析
+# 项目根目录并覆盖此处的值，无需手动修改。
+# 注：web_control_panel.py 已暂时移除（安全原因）
 paths:
   project_root: "/home/yq/nav24r"
   config_dir: "/home/yq/nav24r/config"

@@ -25,14 +25,14 @@
 
 ## 软件栈
 
-### ROS2 Humble
+### ROS2 Jazzy
 
 | 包 | 版本 | 用途 |
 |------|------|------|
-| navigation2 | Humble默认 | 导航栈 |
+| navigation2 | Jazzy默认 | 导航栈 |
 | robot_localization | 3.x | EKF融合 |
-| slam_toolbox | Humble默认 | 可选SLAM |
-| nav2_mppi_controller | Humble默认 | MPPI控制器 |
+| slam_toolbox | Jazzy默认 | 可选SLAM |
+| nav2_mppi_controller | Jazzy默认 | MPPI控制器 |
 
 ### Factor Perception SDK
 
@@ -95,4 +95,4 @@
 
 ---
 
-*Created: 2026-05-25*
+*Created: 2026-05-25 | Updated: 2026-06-20 (Humble → Jazzy)*

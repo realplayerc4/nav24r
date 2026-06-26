@@ -134,7 +134,9 @@
       "Bash(dmesg -T)",
       "Bash(journalctl --list-boots)",
       "WebFetch(domain:mcp.flowus.cn)",
-      "Bash(gh repo *)"
+      "Bash(gh repo *)",
+      "WebFetch(domain:navigation.ros.org)",
+      "WebFetch(domain:introlab.ulaval.ca)"
     ],
     "additionalDirectories": [
       "/home/yq",
