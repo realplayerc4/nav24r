@@ -3,7 +3,7 @@
 # 版本: v2.0 - 2026-06-18
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, RegisterEventHandler, EmitEvent, LogInfo, TimerAction, ExecuteProcess, GroupAction, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, RegisterEventHandler, EmitEvent, LogInfo, TimerAction, GroupAction, OpaqueFunction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, TextSubstitution, EnvironmentVariable
 from launch_ros.actions import ComposableNodeContainer, Node, LifecycleNode
@@ -50,18 +50,6 @@ def generate_launch_description():
 
     # 设备检查参数
     skip_device_check_arg = DeclareLaunchArgument('skip_device_check', default_value='false')
-
-    # ============ 设备检查（启动前 - 信息性检查，不参与条件判断） ============
-    # 注意：此检查仅用于调试和确认设备连接状态，不影响节点的启动。
-    # 如需基于设备检查结果的条件启动，请使用 skip_device_check 参数。
-
-    # 设备检查脚本（输出到屏幕，不参与控制逻辑）
-    device_check_cmd = ExecuteProcess(
-        cmd=['bash', '-c',
-             'lsusb | grep -qiE "03e7|1443|luxonis|oak" && echo "✓ OAK-D device found" || echo "⚠ No OAK-D device found"'],
-        name='device_check',
-        output='screen',
-    )
 
     # ============ Robot Description ============
 
@@ -291,9 +279,6 @@ def generate_launch_description():
         config_path_arg, database_path_arg,
         localization_arg, rtabmap_viz_arg, continue_mapping_arg,
         skip_device_check_arg,
-
-        # 设备检查（可选）
-        device_check_cmd,
 
         # 节点
         robot_state_publisher_node,
