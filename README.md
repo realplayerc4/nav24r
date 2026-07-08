@@ -36,6 +36,7 @@
 - **ROS 版本**: ROS2 Jazzy
 - **Python**: 3.12+
 - **硬件**: OAK-D Pro / OAK-D Pro W 相机
+- **外部依赖**: Factor Perception SDK（已安装）、`ros-jazzy-rtabmap-ros`、`ros-jazzy-navigation2`
 
 ### 安装步骤
 
@@ -48,93 +49,118 @@
 2. **安装依赖**
    ```bash
    # ROS2 依赖
-   sudo apt install ros-jazzy-navigation2 ros-jazzy-rtabmap-ros
-   
+   sudo apt install ros-jazzy-navigation2 ros-jazzy-rtabmap-ros ros-jazzy-rmw-cyclonedds-cpp
+
    # Python 依赖
    pip3 install pyyaml
    ```
 
 3. **配置环境**
    ```bash
-   # Cyclone DDS 配置（推荐）
+   # Cyclone DDS 配置（推荐，降低延迟）
    export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
    export CYCLONEDDS_URI=file://$(pwd)/config/cyclonedds.xml
-   
-   # 添加到 bashrc（可选）
+
+   # 添加到 bashrc（永久生效）
    echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> ~/.bashrc
-   echo "export CYCLONEDDS_URI=file://$(pwd)/config/cyclonedds.xml" >> ~/.bashrc
+   echo "export CYCLONEDDS_URI=file://$(realpath .)/config/cyclonedds.xml" >> ~/.bashrc
    ```
 
 4. **检查相机**
    ```bash
-   # 检测 OAK-D 设备
    ./scripts/check_camera.sh
    ```
 
-### 启动系统
+### ⭐ 启动系统（推荐方式）
 
-#### 方式 1: 使用控制面板（推荐）
+**程序入口为控制面板**，直接用 Python 运行，无需 colcon 编译：
 
 ```bash
 python3 scripts/factor_control_panel.py
 ```
 
-控制面板功能：
-- ✅ 一键启动建图/导航
-- ✅ 设备状态实时监控
-- ✅ 地图质量分析
-- ✅ Octomap 导出
-- ✅ 多视角地图观察
+控制面板功能一览：
 
-#### 方式 2: 使用 Launch 文件
+| 功能 | 说明 |
+|------|------|
+| 🗺️ 新建地图 | 输入地图 ID 后点击“开始建图” |
+| 🔄 续建地图 | 选择已有地图 → 续建 → 开始建图 |
+| 🧭 定位导航 | 选择地图 → 开始导航 |
+| 🚀 完整导航 | Factor Perception + RTAB-Map + Nav2 全内容 |
+| 📷 设备状态 | OAK-D 连接状态实时监控（每3秒） |
+| 📊 地图质量分析 | 地图 100 分制评分报告 |
+| 🗺️ 导出 Octomap | 启动 Database Viewer 导出 |
+| 📁 地图分析数据库查看器 | 直接打开 rtabmap-databaseViewer |
+
+> **替代入口（无 GUI 环境）**: `python3 scripts/web_control_panel.py`，在浏览器访问 `http://localhost:5000`
+
+---
+
+### 🛠️ 高级用法：直接当 Launch 文件
+
+> **注意**: 以下方式需要先将 `nav24r` 作为 ROS2 包编译安装。日常使用控制面板无需此步骤。
 
 ```bash
+# 在 colcon 工作区编译安装（仅需一次）
+cd ~/ros2_ws  # 或您的 colcon 工作区
+ln -s /home/yq/nav24r src/nav24r  # 或将目录拷贝进 src/
+colcon build --packages-select nav24r
+source install/setup.bash
+
+# 然后可以直接用 ros2 launch
 # 新建地图
 ros2 launch nav24r factor_perception_auto.launch.py
 
 # 续建地图
 ros2 launch nav24r factor_perception_auto.launch.py continue_mapping:=true
 
-# 定位模式（使用已有地图）
+# 定位模式
 ros2 launch nav24r factor_perception_auto.launch.py localization:=true
 
-# 隔离架构（推荐，更稳定）
+# 隔离架构（更稳定）
 ros2 launch nav24r factor_perception_isolated.launch.py
 
-# 完整导航系统（Factor Perception + RTAB-Map + Nav2）
+# 完整导航系统
 ros2 launch nav24r nav24r_full.launch.py
 ```
 
 ---
 
-## 📁 项目结构
-
 ```
 nav24r/
-├── config/                    # 配置文件
-│   ├── nav2_params.yaml      # Nav2 参数
-│   ├── rtabmap_custom.ini    # RTAB-Map 参数
-│   ├── cyclonedds.xml        # DDS 优化配置
-│   └── rtabmap_light.rviz    # RViz 配置
+├── 📄 package.xml                          # ROS2 包描述（ament_python）
+├── 📄 setup.py / setup.cfg                 # colcon 构建配置
+├── 📄 factor_perception_auto.launch.py     # 根目录 Launch 文件（感知+SLAM）
 │
-├── launch/                    # Launch 文件
-│   ├── nav24r_full.launch.py        # 完整系统
-│   ├── factor_perception_auto.launch.py    # 自动感知
-│   └── factor_perception_isolated.launch.py # 隔离架构
+├── config/                                 # 配置文件（14个）
+│   ├── rtabmap_custom.ini                 # RTAB-Map 完整参数配置
+│   ├── nav2_params.yaml                   # Nav2 参数
+│   ├── factor_perception_config.yaml      # 感知SDK配置（相机型号/密钥等）
+│   ├── cyclonedds.xml                     # Cyclone DDS 优化
+│   └── *.rviz (6个)                       # 多种 RViz 视角配置
 │
-├── scripts/                   # 工具脚本
-│   ├── factor_control_panel.py   # 控制面板
-│   ├── check_camera.sh           # 设备检测
-│   ├── analyze_map_quality.py    # 地图分析
-│   └── export_octomap.py         # Octomap 导出
+├── launch/                                 # Launch 文件
+│   ├── nav24r_full.launch.py              # ✅ 完整系统（感知+SLAM+Nav2）
+│   ├── factor_perception_isolated.launch.py # ✅ 隔离架构（推荐，更稳定）
+│   └── nav2.launch.py                     # 纯 Nav2
 │
-├── docs/                      # 文档目录
-│   ├── ros2_engineering_analysis.md   # 工程分析
-│   ├── rtabmap_config_doc.md          # RTAB-Map 配置
-│   ├── nav2_integration_plan.md       # Nav2 集成方案
-│   └── WORK_SUMMARY_20260615.md       # 工作总结
+├── scripts/                                # 工具脚本（19个）
+│   ├── factor_control_panel.py            # ⭐ 主入口：tkinter 控制面板
+│   ├── web_control_panel.py               # 替代入口：Web 控制面板（无GUI）
+│   ├── analyze_map_quality.py             # 地图质量分析（100分制）
+│   ├── export_octomap.py                  # Octomap 导出
+│   ├── check_camera.sh                    # OAK-D 设备检测
+│   ├── start_factor.sh / factor_control.sh # 命令行快捷启动
+│   └── diagnose.sh / setup_cyclonedds.sh  # 诊断/配置脚本
 │
-└── CHANGELOG.md               # 变更日志
+├── docs/                                   # 文档（24篇）
+│   ├── WORK_SUMMARY_20260615.md           # 工作总结
+│   ├── ros2_engineering_analysis.md       # ROS2工程分析
+│   └── 因子空间感知SDK标准版使用手册.pdf
+│
+├── Calibrat/                               # IMU/相机标定工具
+├── memory-bank/                            # 架构文档
+└── CHANGELOG.md
 ```
 
 ---
@@ -279,6 +305,7 @@ nav24r/
 - [ROS2 工程分析报告](docs/ros2_engineering_analysis.md) - 系统架构问题与解决方案
 - [RTAB-Map 配置文档](config/rtabmap_config_doc.md) - 参数配置与优化
 - [Nav2 集成方案](docs/nav2_integration_plan.md) - 导航系统集成指南
+- [Nav2/RTAB-Map 知识要点](docs/nav2_rtabmap_knowledge.md) - Nav2 与 RTAB-Map 核心知识速查 ⭐
 - [工作总结](docs/WORK_SUMMARY_20260615.md) - 开发过程详细记录
 
 ### 使用指南
