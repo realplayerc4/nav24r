@@ -25,8 +25,8 @@
 | 相机 | Luxonis OAK-D Pro |
 | 主控板 | RK3588 (上位机) |
 | 控制板 | RL 控制板 (下位机，执行步态) |
-| ROS2 版本 | Humble |
-| 操作系统 | Ubuntu 22.04 |
+| ROS2 版本 | Jazzy |
+| 操作系统 | Ubuntu 24.04 |
 
 ## 项目边界
 

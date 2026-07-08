@@ -1,1 +1,0 @@
-/home/yq/nav24r/launch/nav24r_full.launch.py

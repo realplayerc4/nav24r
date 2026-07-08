@@ -2,7 +2,7 @@
 
 [![ROS2 Version](https://img.shields.io/badge/ROS2-Jazzy-blue.svg)](https://docs.ros.org/en/jazzy/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-RK3588%20|%20x86_64-orange.svg)]()
+[![Platform](https://img.shields.io/badge/Platform-x86__64%20%7C%20仿真优先-orange.svg)]()
 
 基于 ROS2 Jazzy 的人形机器人自主导航系统，集成 Factor Perception SDK、RTAB-Map SLAM 和 Nav2 导航栈。
 
@@ -37,6 +37,7 @@
 - **Python**: 3.12+
 - **硬件**: OAK-D Pro / OAK-D Pro W 相机
 - **外部依赖**: Factor Perception SDK（已安装）、`ros-jazzy-rtabmap-ros`、`ros-jazzy-navigation2`
+- **测试模式**: 仿真优先，无实机条件下优先验证感知/SLAM/Nav2 基础流程
 
 ### 安装步骤
 

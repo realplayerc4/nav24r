@@ -142,7 +142,7 @@ ros2 topic echo /navigate_to_pose/_action/status
 1. **TF 树冲突** - 可能需要禁用某个节点的 TF 发布
 2. **话题命名空间** - 需要仔细配置重映射
 3. **QoS 兼容性** - RTAB-Map 和 Nav2 的 QoS 可能不匹配
-4. **性能** - 实时 SLAM + Nav2 可能对 RK3588 有压力
+4. **性能** - 先以仿真/单机方式验证 Nav2，性能瓶颈后续按实机平台再评估
 
 ## 参考资料
 

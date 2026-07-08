@@ -344,12 +344,36 @@ class FactorControlPanel:
 
             # 判断是否为续建模式
             if self.is_continue and os.path.exists(db_path):
-                # 续建：加载已有地图数据继续建图
+                # 续建：先以定位模式启动（能正确加载和显示旧地图），
+                # 然后延迟切换到 SLAM 模式（续建新数据）
+                #
+                # 原因：直接以 SLAM 模式 + Mem/InitWMWithAllNodes=true 续建时，
+                # 旧节点加载到工作内存但不在 Local map 中，
+                # 导致 2D 占位栅格地图为空（local map=0），RViz 看不到旧地图。
+                # 定位模式下 RTAB-Map 能正确优化并发布旧地图数据。
                 cmd = ['bash', '-c', f'source {ros_setup} && ros2 launch {launch_file} '
-                       f'localization:=false rtabmap_viz:=true database_path:={db_path} '
-                       f'key:={camera_key} config_path:={config_path} continue_mapping:=true']
-                self.status_var.set(f"状态: 续建模式 | {map_id} (加载已有地图)")
-                logger.info(f"启动续建模式: {map_id}, 数据库: {db_path}")
+                       f'localization:=true rtabmap_viz:=true database_path:={db_path} '
+                       f'key:={camera_key} config_path:={config_path}']
+                self.status_var.set(f"状态: 续建模式 | {map_id} (先定位，后切换建图)")
+                logger.info(f"启动续建模式（先定位）: {map_id}, 数据库: {db_path}")
+
+                # 延迟切换到建图模式
+                def switch_to_mapping():
+                    time.sleep(10)  # 等待定位模式初始化完成并显示旧地图
+                    try:
+                        switch_script = os.path.join(
+                            self.app_config['paths']['scripts_dir'], 'switch_to_mapping.py')
+                        subprocess.run(
+                            ['python3', switch_script, '--delay', '0'],
+                            capture_output=True, text=True, timeout=45)
+                        logger.info("续建模式: 已从定位切换到建图")
+                    except Exception as e:
+                        logger.error(f"续建模式切换失败: {e}")
+
+                # 先启动定位模式
+                subprocess.Popen(cmd, shell=False)
+                # 延迟切换到建图模式
+                threading.Thread(target=switch_to_mapping, daemon=True).start()
             else:
                 # 新建图
                 cmd = ['bash', '-c', f'source {ros_setup} && ros2 launch {launch_file} '
@@ -357,8 +381,8 @@ class FactorControlPanel:
                        f'key:={camera_key} config_path:={config_path}']
                 self.status_var.set(f"状态: 建图模式 | {map_id}")
                 logger.info(f"启动建图模式: {map_id}, 数据库: {db_path}")
+                subprocess.Popen(cmd, shell=False)
 
-            subprocess.Popen(cmd, shell=False)
             # 重置续建标记
             self.is_continue = False
             self.continue_var.set("")
@@ -401,6 +425,9 @@ class FactorControlPanel:
             subprocess.Popen(cmd, shell=False)
             self.status_var.set(f"状态: 导航模式 | {name}")
             logger.info(f"启动导航模式: {name}, 数据库: {db_path}")
+            # 重置续建标记（防止下次建图时误入续建模式）
+            self.is_continue = False
+            self.continue_var.set("")
         except Exception as e:
             logger.error(f"启动导航失败: {e}")
             messagebox.showerror("错误", f"启动导航失败: {str(e)}")

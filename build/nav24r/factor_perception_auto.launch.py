@@ -1,1 +1,0 @@
-/home/yq/nav24r/factor_perception_auto.launch.py

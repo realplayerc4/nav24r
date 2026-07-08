@@ -153,7 +153,7 @@ echo ""
 
 echo "启动 Factor Perception + RTAB-Map (无可视化)..."
 
-ros2 launch factor_perception factor_perception_auto.launch.py \
+ros2 launch ${PROJECT_DIR}/factor_perception_auto.launch.py \
     camera_model:=$CAMERA_MODEL \
     cam_pos_z:=$CAM_POS_Z \
     config_path:=$CONFIG_PATH \

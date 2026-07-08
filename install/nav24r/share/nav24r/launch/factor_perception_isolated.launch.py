@@ -1,1 +1,0 @@
-/home/yq/nav24r/build/nav24r/launch/factor_perception_isolated.launch.py

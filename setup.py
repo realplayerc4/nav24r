@@ -14,9 +14,9 @@ setup(
             ['resource/nav24r']),
         # package.xml
         ('share/' + package_name, ['package.xml']),
-        # launch 文件（根目录 + launch/ 子目录）
+        # launch 文件（根目录 + launch/ 子目录 + simulation 子目录）
         ('share/' + package_name + '/launch',
-            glob('launch/*.py') + ['factor_perception_auto.launch.py']),
+            glob('launch/*.py') + glob('factor_perception_auto.launch.py') + glob('launch/simulation/*.py')),
         # config 文件
         ('share/' + package_name + '/config',
             glob('config/*')),
@@ -30,6 +30,9 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'mock_odom_publisher = scripts.mock_odom_publisher:main',
+            'mock_pointcloud_publisher = scripts.mock_pointcloud_publisher:main',
+            'test_simulation = scripts.test_simulation:main',
         ],
     },
 )

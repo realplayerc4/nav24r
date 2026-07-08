@@ -128,7 +128,7 @@ TF 发布规范:
 
 ### 5.2 软件约束
 
-- ROS2 Humble 版本
+- ROS2 Jazzy 版本
 - Cyclone DDS (不使用 Fast DDS)
 
 ### 5.3 功能边界
@@ -154,7 +154,7 @@ TF 发布规范:
 |------|-----|
 | 设备 | OAK-D Pro |
 | MXID | `B4C22057DAC5A53595D92CD44D06F91E` |
-| Key | `12D0C1E7D1AB466C09BD9AE6427D5240` |
+| Key | `${FACTOR_PERCEPTION_KEY}` |
 | 连接状态 | ✅ 已连接 |
 | 安装位置 | 前方水平，高度 0.5m |
 
@@ -162,18 +162,18 @@ TF 发布规范:
 
 ```bash
 # 官方启动方式
-ros2 launch factor_perception factor_perception_launch.py key:=12D0C1E7D1AB466C09BD9AE6427D5240
+ros2 launch factor_perception factor_perception_launch.py key:=$FACTOR_PERCEPTION_KEY
 
 # 如需指定相机位置
 ros2 launch factor_perception factor_perception_launch.py \
-    key:=12D0C1E7D1AB466C09BD9AE6427D5240 \
+    key:=$FACTOR_PERCEPTION_KEY \
     cam_pos_z:=0.5
 ```
 
 ### 可视化插件安装
 
 ```bash
-sudo apt install ros-humble-rtabmap-rviz-plugins ros-humble-octomap-rviz-plugins
+sudo apt install ros-jazzy-rtabmap-rviz-plugins ros-jazzy-octomap-rviz-plugins
 ```
 
 ---

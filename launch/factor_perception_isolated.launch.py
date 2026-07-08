@@ -43,7 +43,7 @@ def generate_launch_description():
             FindPackageShare('nav24r'),
             'config', 'rtabmap_custom.ini'
         ]))
-    database_path_arg = DeclareLaunchArgument('database_path', default_value=EnvironmentVariable('HOME', default_value='/home/yq') + '/rtabmap.db')
+    database_path_arg = DeclareLaunchArgument('database_path', default_value=[EnvironmentVariable('HOME', default_value='/home/yq'), TextSubstitution(text='/rtabmap.db')])
     localization_arg = DeclareLaunchArgument('localization', default_value='false')
     rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='true')  # 统一默认值
     continue_mapping_arg = DeclareLaunchArgument('continue_mapping', default_value='false')

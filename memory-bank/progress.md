@@ -4,50 +4,54 @@
 
 **阶段**: 阶段2 完成
 **状态**: ✅ Launch 配置成功
+**测试环境**: 仿真优先，暂无实机
 
 ---
 
 ## 里程碑
 
-| 里程碑 | 状态 | 完成日期 | 备注 |
-|--------|------|----------|------|
-| M1: 文档中文化 | ✅ 完成 | 2026-05-25 | Vibe Agent 框架建立 |
-| M2: 阶段1-SDK安装 | ✅ 完成 | 2026-05-25 | factor_perception, nav2, slam_toolbox 已安装 |
-| M3: 阶段1-DDS配置 | ✅ 完成 | 2026-05-25 | Cyclone DDS 已配置 |
-| M4: 阶段1-robot_localization | ⏳ 暂缓 | - | 暂不考虑 EKF 融合 |
-| M5: 阶段2-Launch配置 | ✅ 完成 | 2026-05-25 | Launch 文件正常运行 |
-| M6: 阶段2-Launch测试 | ✅ 完成 | 2026-05-25 | 相机数据正常发布 |
-| M7: Nav2 Costmap 配置 | ✅ 完成 | 2026-05-25 | nav2_params.yaml 已创建 |
-| M8: EKF 融合测试 | ⏳ 暂缓 | - | 暂不考虑 |
-| M9: MPPI 调参 | ⏳ 待开始 | - | 需实机测试 |
-| M10: RK3588 部署 | ⏳ 待开始 | - | |
-| M11: 实机测试 | ⏳ 待开始 | - | |
+| 里程碑 | 状态 | 备注 |
+|--------|------|------|
+| M1: 文档中文化 | ✅ 完成 | 2026-05-25 |
+| M2: 阶段1-SDK安装 | ✅ 完成 | factor_perception, nav2, slam_toolbox |
+| M3: 阶段1-DDS配置 | ✅ 完成 | Cyclone DDS |
+| M4: 阶段1-robot_localization | ⏸ 暂缓 | 暂不考虑 EKF 融合 |
+| M5: 阶段2-Launch配置 | ✅ 完成 | Launch 文件正常 |
+| M6: 阶段2-Launch测试 | ✅ 完成 | 相机数据正常发布 |
+| M7: Nav2 Costmap 配置 | ✅ 完成 | nav2_params.yaml 已创建 |
+| M8: EKF 融合测试 | ⏸ 暂缓 | 暂不考虑 |
+| M9: MPPI 调参 | ❌ 取消 | 改为仿真环境功能验证 |
+| M10: RK3588 部署 | ❌ 取消 | 无部署计划 |
+| M11: 实机测试 | ⏸ 暂缓 | 暂无条件，改为仿真测试 |
 
 ---
 
 ## 当前任务
 
-### Claude 任务 (已完成)
+### 优先：仿真环境测试
 
-- [x] 创建 memory-bank 固定上下文层
-- [x] 创建 docs/agent 角色定义
-- [x] 翻译主文档为中文 README.md
-- [x] 创建 changelog.md
-- [x] 创建 spec.md 模板
-- [x] 创建 knowledge.md 模板
-- [x] 配置 Cyclone DDS
-- [x] 配置 Launch 文件
-- [x] 学习 Factor-VIO Front-end 并记录到 knowledge.md
-- [x] 学习 RTAB-Map Back-end 并记录到 knowledge.md
+- [ ] Factor Perception 功能验证
+  - [ ] OAK-D 驱动正常启动
+  - [ ] RGB/深度/IMU 话题发布正常
+  - [ ] VIO 里程计话题 `/factor_perception/odom` 正常
+  - [ ] 点云话题 `/factor_perception/cloud_obstacles` 正常
+- [ ] RTAB-Map 建图/定位测试
+  - [ ] 新建地图模式正常
+  - [ ] 定位模式正常
+  - [ ] 回环检测正常
+  - [ ] 3D 栅格地图发布正常
+- [ ] Nav2 仿真功能测试
+  - [ ] Nav2 生命周期正常启动
+  - [ ] 全局规划器正常
+  - [ ] MPPI 控制器基础运行
+  - [ ] 代价地图接收点云正常
+  - [ ] 发送目标点后路径规划正常
+  - [ ] 避障行为正常
 
-### 用户任务 (待执行)
+### 后续
 
-- [ ] 立法者: 编写 spec.md (集成规范) - 部分完成
-- [ ] 智库专家: 补充测试结果到 knowledge.md
-- [ ] 安装 rviz 插件:
-  ```bash
-  sudo apt install ros-humble-rtabmap-rviz-plugins ros-humble-octomap-rviz-plugins
-  ```
+- [ ] 如有实机条件，再考虑 M4/M8/M11
+- [ ] 后续视需要再评估部署/移植
 
 ---
 
@@ -60,7 +64,8 @@
 | 2026-05-25 | Launch 文件配置完成 | Claude (执行官) |
 | 2026-05-25 | Factor-VIO 知识记录完成 | Claude (智库专家) |
 | 2026-05-25 | RTAB-Map 知识记录完成 | Claude (智库专家) |
+| 2026-06-29 | M9/M10 取消，转向仿真测试 | Hermes |
 
 ---
 
-*Last updated: 2026-05-25*
+*Last updated: 2026-06-29*
