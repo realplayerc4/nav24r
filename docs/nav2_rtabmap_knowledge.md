@@ -31,6 +31,47 @@
 | `/factor_perception/cloud_obstacles` | `sensor_msgs/PointCloud2` | 3D 障碍物点云 |
 | `/tf` | `tf2_msgs/TFMessage` | TF 树（map → odom → base_link → ...）|
 
+### 1.5 回环检测（Loop Closure Detection）
+
+RTAB-Map 的回环检测分两步：**视觉匹配**（词袋模型）→ **几何验证**（RANSAC + 变换估计）。
+
+#### 日志含义
+
+| 日志 | 含义 |
+|------|------|
+| `Loop hypothesis <id> accepted` | 视觉匹配通过，几何验证也通过，回环成立 |
+| `Loop hypothesis <id> rejected` | 视觉匹配通过，但几何验证失败，回环被拒绝 |
+
+- **hypothesis**：当前帧与历史帧的潜在回环匹配
+- **id**：候选匹配的节点 ID（如 3054 = 数据库中第 3054 帧）
+- **rejected**：RANSAC 内点不足或变换估计不合理
+
+#### 被拒绝的常见原因
+
+| 原因 | 说明 |
+|------|------|
+| 几何验证失败 | RANSAC 内点数不足，变换估计不可靠 |
+| 变换不合理 | 估计位姿与里程计差距超出阈值 |
+| 重复纹理/场景 | 走廊、窗户等导致视觉误匹配 |
+| 运动模糊 | 图像质量差，特征点匹配不准确 |
+
+#### 判断与调优
+
+- **偶尔 rejected**：正常，验证机制在过滤错误回环
+- **大量 rejected**：可能场景特征重复、相机标定/里程计偏差、图像质量差
+- **地图漂移严重**：回环被误拒绝，可降低验证严格度
+
+```yaml
+# 调优参数（rtabmap.launch.py 或 rtabmap_custom.ini）
+rtabmap:
+  ros__parameters:
+    Rtabmap/LoopThr: 0.11       # 回环检测阈值（默认 0.11，越低越严格）
+    Vis/MinInliers: 15          # 最小内点数（默认 15，可降至 10 放宽验证）
+    Vis/InlierDistance: 0.1     # 内点距离阈值（默认 0.1m）
+```
+
+> ⚠️ 降低 `Vis/MinInliers` 可让更多回环通过，但会增加误匹配风险。
+
 ### 1.4 离线分析工具
 
 - **rtabmap-databaseViewer**：官方工具，可直接打开 `.db` 文件
@@ -132,5 +173,6 @@ ros2 topic echo /factor_perception/map --once
 
 - **OAK-D 未检测到**：检查 USB 连接（建议 USB 3.0），运行 `lsusb | grep -iE "03e7|1443|luxonis|oak"`
 - **GPU 崩溃**：禁用 `rtabmap_viz`，使用轻量化 RViz2 配置
-- **导航漂移**：检查闭环检测数量，确保地图质量评分 ≥ 70
+- **导航漂移**：检查闭环检测数量，确保地图质量评分 ≥ 70；大量 "Loop hypothesis rejected" 说明回环被误拒绝，参考 1.5 节调优
+- **回环检测失败**：偶尔 rejected 正常；大量 rejected 检查场景重复性、相机标定、图像质量
 - **话题不匹配**：确认 Nav2 `nav2_params.yaml` 中话题名与 RTAB-Map 输出一致
