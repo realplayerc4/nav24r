@@ -1,7 +1,7 @@
 Panels:
   - Class: rviz_common/Displays
     Help Height: 70
-    Name: Octomap 3D 专用
+    Name: Octomap 3D 专用 (障碍物高度 0.2~1.4m)
     Property Tree Widget:
       Expanded:
         - /障碍物 Octomap1

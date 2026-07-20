@@ -1,22 +1,29 @@
 # Factor Perception 配置文件
-# 用于管理敏感信息和常用配置
+# 基于 SDK v1.5.1 更新
 #
 # 安全提示：相机密钥优先从环境变量 FACTOR_PERCEPTION_KEY 读取。
 # 如果环境变量已设置，以下配置中的密钥将被忽略。
 # 建议通过环境变量配置密钥：export FACTOR_PERCEPTION_KEY='your_key_here'
 
-# 相机配置
+# 相机配置 - SDK v1.5.1 支持型号
 camera:
   # OAK-D 相机密钥（硬件绑定，无需保密）
-  # 密钥用于激活 Factor Perception SDK
+  # 密钥用于激活 Factor Perception SDK 完整功能（-key 参数）
   keys:
-    OAK-D-PRO-W: "12D0C1E7D1AB466C09BD9AE6427D5240"  # OAK-D Pro W 密钥
-    OAK-D-S2: "B4C22057DAC5A53595D92CD44D06F91E"     # OAK-D S2 密钥
+    OAK-D-PRO-W: "12D0C1E7D1AB466C09BD9AE6427D5240"  # OAK-D Pro W (USB 3.0, 4K)
+    OAK-D-S2: "B4C22057DAC5A53595D92CD44D06F91E"     # OAK-D S2 (USB 3.0)
+    OAK-D-W: "见SDK官方文档"                           # OAK-D W (广角)
+    OAK-D-PRO: "见SDK官方文档"                         # OAK-D Pro
+    OAK-D-PRO-POE: "见SDK官方文档"                     # OAK-D Pro PoE
+    OAK-D-PRO-W-POE: "见SDK官方文档"                   # OAK-D Pro W PoE
+    OAK-D-S2-POE: "见SDK官方文档"                      # OAK-D S2 PoE
+    OAK-D-LR: "低功耗型号，无需密钥"                    # OAK-D LR (低功耗)
+    OAK-D-SR: "低功耗型号，无需密钥"                    # OAK-D SR (低功耗)
 
   # OAK-D 相机机器码（MXID，设备序列号）
-  # 用于识别特定相机设备
+  # 用于识别特定相机设备 (-mxid_or_name 参数)
   mxids:
-    OAK-D-PRO: "14442C105168D9D600"  # OAK-D Pro 设备序列号
+    OAK-D-PRO: "14442C105168D9D600"  # 示例 MXID
 
   # 当前默认配置
   model: "OAK-D-PRO-W"  # 当前使用的相机型号
@@ -27,24 +34,51 @@ camera:
 ros:
   distro: "jazzy"
   setup_path: "/opt/ros/jazzy/setup.bash"
+  # 注意：SDK v1.5.1 推荐使用 CycloneDDS 或 Zenoh，不建议使用 Fast DDS
+  # 详见 SDK 文档 Section 3.5
 
 # 地图配置
 maps:
   directory: "~/rtabmap_maps"
   default_db: "~/rtabmap.db"
 
-# 启动参数
+# 启动参数（与 factor_perception_auto.launch.py 对应）
 launch:
-  depth_filter: false
-  ir_intensity: 0.4
-  cam_pos_z: 0.85
-  publish_tf: true
+  # 相机参数
+  camera_model: "OAK-D-PRO-W"
+  cam_pos_z: 0.85  # 相机安装高度 (m)
+  cam_pos_x: 0.0
+  cam_pos_y: 0.0
+  cam_roll: 0.0
+  cam_pitch: 0.0
+  cam_yaw: 0.0
+
+  # 深度与IR
+  depth_filter: true  # 深度置信度过滤（开启可提升导航质量但增加CPU, true应对地毯弱纹理）
+  ir_intensity: 0.8    # 红外补光强度 (0.0-1.0, 仅Pro型号支持, 0.8应对地毯等弱纹理地面)
+  min_feat_depth: 0.0  # 特征提取最小深度 (m)
+
+  # TF 参数
+  publish_tf: true     # 发布TF变换
+  base_frame_id: "base_link"
+  odom_frame_id: "odom"
+  oak_tf_prefix: "oak" # OAK相机TF前缀
+
+  # CPU 绑定（-1 = 不绑定）
+  camera_cpu: -1
+  imu_cpu: -1
+
+  # RTAB-Map
+  rgb_fps: 20.0
+  rtabmap_viz: true
+
+  # 神经网络模型路径
+  # blob_path: ""  # 留空使用SDK默认模型
 
 # 路径配置
 # 注意: 以下路径值仅作参考备用。
 # factor_control_panel.py 会自动用 __file__ 动态解析
 # 项目根目录并覆盖此处的值，无需手动修改。
-# 注：web_control_panel.py 已暂时移除（安全原因）
 paths:
   project_root: "/home/yq/nav24r"
   config_dir: "/home/yq/nav24r/config"

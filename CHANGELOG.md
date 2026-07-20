@@ -1,5 +1,50 @@
 # 变更日志
 
+## [v2.2.0] - 2026-07-20 - 障碍物高度过滤 + 地毯优化 + 数据库保护
+
+### 🐛 Bug 修复
+- ✅ 数据库表名不匹配：`_check_db_integrity()` 检查旧版表名 `vertex`/`rgbd_image`，RTAB-Map v0.22+ 使用 `Node`/`Data`
+
+### 📝 按钮文案修正
+- ✅ "开始导航" → "开始定位"（实际启动 localization 模式）
+- ✅ 状态栏/日志同步修正
+
+### 🛡️ 数据库保护
+- ✅ 按钮视觉保护：数据库存在时按钮变橙色 + "(覆盖)" 文字提示
+- ✅ 确认弹窗：已有确认框，本次确认代码路径正确（依赖完整性检查通过）
+
+### 📏 障碍物高度过滤 (0.2m ~ 1.4m)
+- ✅ `rtabmap.ini`：`MaxObstacleHeight=1.4`, `MinGroundHeight=0.2`, `MaxGroundAngle=30`
+- ✅ `nav2_params.yaml`：local/global costmap `max_obstacle_height=1.4`, `min_obstacle_height=0.2`
+
+### 🏠 地毯/弱纹理地面优化
+- ✅ `ir_intensity` 从 0.4 提升到 0.8（IR 投影仪电流增强）
+- ✅ 立体匹配：`TextureThreshold=5`, `UniquenessRatio=10/12`, `SpeckleRange=3`
+- ✅ 噪声过滤：`NoiseFilteringMinNeighbors=7`
+
+### 🖼️ RViz 配置
+- ✅ 新建 `navigation_clean.rviz`：导航专用干净视图（无点云噪点）
+- ✅ `mapping_3d.rviz`：移除地面/全局点云，仅保留 Octomap 3D (0.2~1.4m)
+- ✅ 所有 RViz 面板标题标注高度范围
+
+### 📂 影响文件
+```
+scripts/factor_control_panel.py
+config/rtabmap.ini
+config/nav2_params.yaml
+config/factor_perception_config.yaml
+factor_perception_auto.launch.py
+launch/nav24r_full.launch.py
+launch/factor_perception_isolated.launch.py
+config/mapping.rviz
+config/mapping_3d.rviz
+config/navigation.rviz
+config/navigation_clean.rviz       # 新增
+config/map_viewer_3d.rviz
+config/octomap.rviz
+config/octomap_3d.rviz
+```
+
 ## [v2.1.0] - 2026-07-17 - SDK 更新与配置简化
 
 ### 🔧 配置更新

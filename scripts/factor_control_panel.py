@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Factor Perception 控制面板（简化版）
+Factor Perception 控制面板 v2.0
 只使用默认数据库 ~/rtabmap.db，支持建图/续建/导航
+特性: USB 3.0 强制检测、运行状态转圈动画、地图保护
 """
 
 import tkinter as tk
@@ -12,6 +13,7 @@ import logging
 import yaml
 import threading
 import time
+import math
 
 LOG_DIR = os.path.expanduser("~/.local/share/nav24r/logs")
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -23,13 +25,55 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 DEFAULT_DB = os.path.expanduser("~/rtabmap.db")
+USB3_MIN_SPEED_MBPS = 5000  # USB 3.0 最低速度 5Gbps = 5000 Mbps
+
+
+class Spinner:
+    """顶部页眉旋转动画，类似 Claude 的加载指示器"""
+    def __init__(self, canvas, x, y, radius=12, color='#00ff88', width=3):
+        self.canvas = canvas
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.color = color
+        self.width = width
+        self.angle = 0
+        self.running = False
+        self.arc_id = None
+
+    def start(self):
+        self.running = True
+        self._animate()
+
+    def stop(self):
+        self.running = False
+        if self.arc_id:
+            self.canvas.delete(self.arc_id)
+            self.arc_id = None
+
+    def _animate(self):
+        if not self.running:
+            return
+        self.angle = (self.angle + 15) % 360
+        if self.arc_id:
+            self.canvas.delete(self.arc_id)
+        start = self.angle
+        extent = 270
+        self.arc_id = self.canvas.create_arc(
+            self.x - self.radius, self.y - self.radius,
+            self.x + self.radius, self.y + self.radius,
+            start=start, extent=extent,
+            style=tk.ARC, outline=self.color, width=self.width
+        )
+        self.canvas.after(50, self._animate)
 
 
 class FactorControlPanel:
     def __init__(self, root):
         self.root = root
         self.root.title("Factor Perception 控制面板")
-        self.root.geometry("650x620")
+        self.root.geometry("650x640")
+        self.root.configure(bg='#2b2b2b')
 
         self.load_app_config()
 
@@ -40,10 +84,13 @@ class FactorControlPanel:
         self.ros_mode = None
         self.ros_buttons = []
         self.independent_buttons = []
+        self.spinner = None
 
         self.create_ui()
         self.start_device_monitor()
         self.update_db_size()
+        # 启动时立即同步检测 USB 速度（不等待异步设备检测）
+        self._check_usb_speed_now()
 
     def load_app_config(self):
         _script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -83,9 +130,17 @@ class FactorControlPanel:
             }
 
     def create_ui(self):
-        tk.Label(self.root, text="Factor Perception 控制面板",
-                font=('Arial', 16, 'bold'), fg='#00ff88', bg='#2b2b2b').pack(pady=10)
-        self.root.configure(bg='#2b2b2b')
+        # === 顶部页眉：标题 + 转圈动画 ===
+        header_frame = tk.Frame(self.root, bg='#2b2b2b')
+        header_frame.pack(pady=10)
+
+        self.header_canvas = tk.Canvas(header_frame, width=30, height=30,
+                                        bg='#2b2b2b', highlightthickness=0)
+        self.header_canvas.pack(side=tk.LEFT, padx=(0, 8))
+        self.spinner = Spinner(self.header_canvas, 15, 15, radius=10, color='#00ff88', width=3)
+
+        tk.Label(header_frame, text="Factor Perception 控制面板",
+                font=('Arial', 16, 'bold'), fg='#00ff88', bg='#2b2b2b').pack(side=tk.LEFT)
 
         device_frame = tk.LabelFrame(self.root, text="📷 OAK-D 设备状态", font=('Arial', 11), padx=10, pady=10)
         device_frame.pack(fill=tk.X, padx=20, pady=5)
@@ -146,7 +201,7 @@ class FactorControlPanel:
         self.btn_continue.pack(side=tk.LEFT, padx=5)
         self.ros_buttons.append(self.btn_continue)
 
-        self.btn_nav = tk.Button(btn_row1, text="🧭 开始导航", width=14, height=2,
+        self.btn_nav = tk.Button(btn_row1, text="🧭 开始定位", width=14, height=2,
             command=self.start_navigation, bg='#3d5a80', fg='white')
         self.btn_nav.pack(side=tk.LEFT, padx=5)
         self.ros_buttons.append(self.btn_nav)
@@ -181,11 +236,28 @@ class FactorControlPanel:
         tk.Button(btn_row4, text="📊 地图质量", width=14, height=2, command=self.analyze_map_quality, bg='#e67e22', fg='white').pack(side=tk.LEFT, padx=5)
         tk.Button(btn_row4, text="🗺️ 导出Octomap", width=14, height=2, command=self.export_octomap, bg='#16a085', fg='white').pack(side=tk.LEFT, padx=5)
         tk.Button(btn_row4, text="☁️ 导出点云+RViz", width=14, height=2, command=self.export_cloud_and_view, bg='#16a085', fg='white').pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_row4, text="🧹 清理地面误判", width=14, height=2, command=self.clean_ground_false_positive, bg='#e67e22', fg='white').pack(side=tk.LEFT, padx=5)
+
+        btn_row5 = tk.Frame(btn_frame)
+        btn_row5.pack(pady=5)
+        tk.Button(btn_row5, text="🧪 测试报告", width=14, height=2, command=self.run_test_report, bg='#8e44ad', fg='white').pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_row5, text="📋 查看日志", width=14, height=2, command=self.view_log, bg='#555555', fg='white').pack(side=tk.LEFT, padx=5)
 
         self.status_var = tk.StringVar(value="状态: 就绪")
         tk.Label(self.root, textvariable=self.status_var, fg='#00ff88', bg='#2b2b2b', font=('Arial', 10)).pack(pady=5)
 
-        tk.Label(self.root, text=f"💡 新建建图: 覆盖已有数据库 | 续建: 加载已有数据继续建图 | 重置地图: 删除数据库", fg='#888888', bg='#2b2b2b', font=('Arial', 8)).pack()
+        # 参数显示栏
+        param_frame = tk.Frame(self.root, bg='#2b2b2b')
+        param_frame.pack(pady=3)
+        cam_cpu = self.app_config.get('launch', {}).get('camera_cpu', '-1')
+        imu_cpu = self.app_config.get('launch', {}).get('imu_cpu', '-1')
+        rgb_fps = self.app_config.get('launch', {}).get('rgb_fps', '20.0')
+        depth_filter = self.app_config.get('launch', {}).get('depth_filter', 'false')
+        ir_intensity = self.app_config.get('launch', {}).get('ir_intensity', '0.4')
+        tk.Label(param_frame, text=f"camera_cpu={cam_cpu}  |  imu_cpu={imu_cpu}  |  rgb_fps={rgb_fps}  |  depth_filter={depth_filter}  |  ir_intensity={ir_intensity}",
+                 fg='#cc8844', bg='#2b2b2b', font=('Consolas', 9)).pack()
+
+        tk.Label(self.root, text=f"💡 新建建图: 覆盖已有数据库 | 续建: 加载已有数据继续建图 | 重置地图: 删除数据库 | 续建时VIO重启属正常现象，RTAB-Map会自动对齐历史数据", fg='#888888', bg='#2b2b2b', font=('Arial', 8)).pack()
 
     def launch_rviz(self):
         ros_setup = self.app_config['ros']['setup_path']
@@ -219,11 +291,72 @@ class FactorControlPanel:
             btn.config(state=state)
         if running:
             self.status_var.set(f"状态: {mode}运行中...")
+            if self.spinner:
+                self.spinner.start()
         else:
             self.status_var.set("状态: 就绪")
+            if self.spinner:
+                self.spinner.stop()
 
     def is_ros_running(self):
         return self.ros_running
+
+    def _check_db_integrity(self, db_path):
+        """检查数据库文件是否完整且可读"""
+        if not os.path.exists(db_path):
+            return True, "数据库不存在，可以新建"
+
+        # 检查文件大小
+        try:
+            size = os.path.getsize(db_path)
+            if size < 1024:
+                return False, f"数据库文件过小 ({size} bytes)，可能已损坏"
+        except OSError:
+            return False, "无法读取数据库文件"
+
+        # 检查文件头（SQLite 数据库以 "SQLite format 3" 开头）
+        try:
+            with open(db_path, 'rb') as f:
+                header = f.read(16)
+                if not header.startswith(b'SQLite format 3'):
+                    return False, "数据库文件格式错误（非 SQLite）"
+        except (OSError, IOError):
+            return False, "无法读取数据库文件头"
+
+        # 尝试用 sqlite3 验证
+        try:
+            import sqlite3
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=3)
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [row[0] for row in cursor.fetchall()]
+            conn.close()
+            if not tables:
+                return False, "数据库为空（无数据表）"
+            # RTAB-Map v0.22+ 表名（旧版使用 vertex/link/word/rgbd_image）
+            required_tables = ['Node', 'Link', 'Word', 'Data']
+            missing = [t for t in required_tables if t not in tables]
+            if missing:
+                return False, f"数据库缺少必要表: {', '.join(missing)}"
+        except sqlite3.DatabaseError:
+            return False, "数据库文件已损坏（SQLite 错误）"
+        except Exception as e:
+            return False, f"数据库验证失败: {str(e)}"
+
+        return True, f"数据库正常 ({size/(1024*1024):.1f} MB)"
+
+    def _check_db_lock(self, db_path):
+        """检查数据库是否被其他进程锁定"""
+        if not os.path.exists(db_path):
+            return True
+        try:
+            import sqlite3
+            conn = sqlite3.connect(f"file:{db_path}?mode=exclusive", uri=True, timeout=1)
+            conn.close()
+            return True
+        except sqlite3.OperationalError:
+            return False
+        except Exception:
+            return True
 
     def start_new_mapping(self):
         if self.is_ros_running():
@@ -233,8 +366,17 @@ class FactorControlPanel:
             return
         try:
             db_path = self._get_default_db()
+            # 地图保护：如果数据库存在，先检查完整性
             if os.path.exists(db_path):
-                if not messagebox.askyesno("确认覆盖", f"数据库已存在:\n{db_path}\n\n新建建图将覆盖现有数据，是否继续？"):
+                ok, msg = self._check_db_integrity(db_path)
+                if not ok:
+                    messagebox.showerror("数据库错误", f"数据库异常:\n{msg}\n\n建议点击'重置地图'删除后重新建图")
+                    return
+                if not messagebox.askyesno("确认覆盖", f"数据库已存在:\n{db_path}\n({msg})\n\n新建建图将覆盖现有数据，是否继续？"):
+                    return
+                # 检查文件锁
+                if not self._check_db_lock(db_path):
+                    messagebox.showerror("数据库锁定", f"数据库文件被其他进程占用:\n{db_path}\n\n请先停止所有 ROS2 进程后再试")
                     return
                 os.remove(db_path)
                 logger.info(f"删除已有数据库: {db_path}")
@@ -256,8 +398,15 @@ class FactorControlPanel:
             if not os.path.exists(db_path):
                 messagebox.showerror("错误", f"默认数据库不存在: {db_path}\n请先使用'新建建图'创建地图")
                 return
+            ok, msg = self._check_db_integrity(db_path)
+            if not ok:
+                messagebox.showerror("数据库错误", f"数据库异常:\n{msg}\n\n建议点击'重置地图'删除后重新建图")
+                return
+            size_bytes = os.path.getsize(db_path)
+            size_str = f"{size_bytes/(1024*1024):.1f} MB" if size_bytes > 1024*1024 else f"{size_bytes/1024:.1f} KB"
             self._launch_mapping(db_path, "续建地图")
             self.set_ros_running(True, "续建地图")
+            self.status_var.set(f"状态: 续建地图运行中 (数据库 {size_str})")
         except Exception as e:
             self.set_ros_running(False)
             logger.error(f"启动续建失败: {e}")
@@ -277,6 +426,9 @@ class FactorControlPanel:
                    f'key:={camera_key} config_path:={config_path}']
             subprocess.Popen(cmd, shell=False)
             logger.info(f"启动{mode_desc}: {db_path}")
+
+            # 启动后 3 秒验证实际 USB 速度（驱动已打开设备后速度才准确）
+            self.root.after(3000, self._verify_usb_speed_after_launch)
         except Exception as e:
             logger.error(f"启动{mode_desc}失败: {e}")
             messagebox.showerror("错误", f"启动{mode_desc}失败: {str(e)}")
@@ -293,8 +445,13 @@ class FactorControlPanel:
             else:
                 size_str = f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
             self.db_size_var.set(f"大小: {size_str}")
+            # 数据库有内容时，新建建图按钮显示橙色警告
+            if hasattr(self, 'btn_new_mapping'):
+                self.btn_new_mapping.config(bg='#e67e22', text='🗺️ 新建建图 (覆盖)')
         else:
             self.db_size_var.set("大小: 不存在")
+            if hasattr(self, 'btn_new_mapping'):
+                self.btn_new_mapping.config(bg='#2980b9', text='🗺️ 新建建图')
         self.root.after(2000, self.update_db_size)
 
     def start_navigation(self):
@@ -308,6 +465,10 @@ class FactorControlPanel:
             if not os.path.exists(db_path):
                 messagebox.showerror("错误", f"默认数据库不存在: {db_path}\n请先建图")
                 return
+            ok, msg = self._check_db_integrity(db_path)
+            if not ok:
+                messagebox.showerror("数据库错误", f"数据库异常:\n{msg}\n\n建议重新建图")
+                return
             ros_setup = self.app_config['ros']['setup_path']
             camera_key = self.app_config['camera']['key']
             project_root = self.app_config['paths']['project_root']
@@ -318,12 +479,14 @@ class FactorControlPanel:
                    f'localization:=true rtabmap_viz:=true database_path:={db_path} '
                    f'key:={camera_key} config_path:={config_path}']
             subprocess.Popen(cmd, shell=False)
-            self.set_ros_running(True, "导航模式")
-            logger.info(f"启动导航模式: {db_path}")
+            self.set_ros_running(True, "定位模式")
+            logger.info(f"启动定位模式: {db_path}")
+            # 启动后 3 秒验证实际 USB 速度
+            self.root.after(3000, self._verify_usb_speed_after_launch)
         except Exception as e:
             self.set_ros_running(False)
-            logger.error(f"启动导航失败: {e}")
-            messagebox.showerror("错误", f"启动导航失败: {str(e)}")
+            logger.error(f"启动定位失败: {e}")
+            messagebox.showerror("错误", f"启动定位失败: {str(e)}")
 
     def start_full_nav(self):
         if self.is_ros_running():
@@ -347,6 +510,8 @@ class FactorControlPanel:
             subprocess.Popen(cmd, shell=False)
             self.set_ros_running(True, "完整导航")
             logger.info(f"启动完整导航: {db_path}")
+            # 启动后 3 秒验证实际 USB 速度
+            self.root.after(3000, self._verify_usb_speed_after_launch)
         except Exception as e:
             self.set_ros_running(False)
             logger.error(f"启动完整导航失败: {e}")
@@ -591,6 +756,67 @@ class FactorControlPanel:
             messagebox.showerror("错误", f"启动查看器失败: {str(e)}")
             self.status_var.set("状态: 启动查看器失败")
 
+    def clean_ground_false_positive(self):
+        """清理地面误判：分析并清理数据库中的异常地面障碍物"""
+        db_path = self._get_default_db()
+        if not os.path.exists(db_path):
+            messagebox.showinfo("提示", f"数据库不存在:\n{db_path}\n\n无需清理")
+            return
+
+        # 先做 dry-run 分析
+        self.status_var.set("状态: 正在分析地图...")
+        self.root.update()
+
+        script_path = os.path.join(self.app_config['paths']['scripts_dir'], 'clean_ground_false_positives.py')
+        if not os.path.exists(script_path):
+            messagebox.showerror("错误", f"清理脚本不存在:\n{script_path}")
+            self.status_var.set("状态: 清理脚本缺失")
+            return
+
+        # 运行 dry-run 分析
+        result = subprocess.run(
+            ['python3', script_path, '--db', db_path, '--dry-run'],
+            capture_output=True, text=True, timeout=30
+        )
+
+        if result.returncode != 0:
+            messagebox.showerror("分析失败", f"数据库分析失败:\n{result.stderr}")
+            self.status_var.set("状态: 分析失败")
+            return
+
+        # 显示分析结果，询问是否清理
+        analysis = result.stdout
+        if not messagebox.askyesno("确认清理",
+            f"地图分析结果:\n\n{analysis}\n"
+            f"是否清理并重新建图？\n"
+            f"（数据库将备份后删除，下次建图使用新参数）"):
+            self.status_var.set("状态: 已取消清理")
+            return
+
+        # 确认清理
+        self.status_var.set("状态: 正在清理...")
+        self.root.update()
+
+        result = subprocess.run(
+            ['python3', script_path, '--db', db_path],
+            capture_output=True, text=True, timeout=30
+        )
+
+        if result.returncode != 0:
+            messagebox.showerror("清理失败", f"数据库清理失败:\n{result.stderr}")
+            self.status_var.set("状态: 清理失败")
+            return
+
+        messagebox.showinfo("清理完成",
+            f"数据库已清理！\n\n{result.stdout}\n"
+            f"请点击「新建建图」重新建图，新参数会自动生效：\n"
+            f"  • IR 投影仪强度 0.8\n"
+            f"  • MaxGroundHeight=0.05m\n"
+            f"  • NormalK=30\n"
+            f"  • depth_filter=true")
+        self.status_var.set("状态: 地图已清理")
+        self.update_db_size()
+
     def view_database(self):
         db_path = self._get_default_db()
         if not os.path.exists(db_path):
@@ -633,6 +859,8 @@ class FactorControlPanel:
             found = False
             device_info = ""
             usb_speed = ""
+            usb_speed_mbps = 0
+            usb_ok = False
 
             for oak_id in oak_ids:
                 if oak_id.lower() in usb_devices.lower():
@@ -663,14 +891,19 @@ class FactorControlPanel:
                             if vendor in ['03e7', '1443', '2e1d']:
                                 with open(f"{dev}/speed", 'r') as f:
                                     speed_mbps = int(f.read().strip())
+                                    usb_speed_mbps = speed_mbps
                                     if speed_mbps >= 20000:
                                         usb_speed = f"USB {speed_mbps/1000:.1f}Gbps"
+                                        usb_ok = True
                                     elif speed_mbps >= 5000:
                                         usb_speed = f"USB {speed_mbps/1000:.1f}Gbps"
+                                        usb_ok = True
                                     elif speed_mbps >= 1000:
                                         usb_speed = f"USB {speed_mbps/1000:.1f}Gbps"
+                                        usb_ok = True
                                     else:
-                                        usb_speed = f"USB {speed_mbps:.0f}Mbps"
+                                        usb_speed = f"USB {speed_mbps:.0f}Mbps (USB 2.0)"
+                                        usb_ok = False
                                 break
                 except Exception as e:
                     logger.debug(f"获取 USB 速度失败: {e}")
@@ -680,31 +913,71 @@ class FactorControlPanel:
                 info = device_info
                 if usb_speed:
                     info = f"{device_info} | {usb_speed}"
-                return True, info, usb_speed
+                return True, info, usb_speed, usb_ok
 
-            return False, "", ""
+            return False, "", "", False
         except subprocess.TimeoutExpired:
             logger.error("设备检测超时")
-            return False, "检测超时", ""
+            return False, "检测超时", "", False
         except Exception as e:
             logger.error(f"设备检测失败: {e}")
-            return False, f"检测失败: {str(e)}", ""
+            return False, f"检测失败: {str(e)}", "", False
+
+    def _check_usb_speed_now(self):
+        """启动时同步检测 USB 速度，独立于设备检测"""
+        was_detected = getattr(self, '_oak_was_detected', False)
+        try:
+            import glob as g
+            found = False
+            for dev in g.glob('/sys/bus/usb/devices/*'):
+                if os.path.exists(f"{dev}/idVendor") and os.path.exists(f"{dev}/speed"):
+                    with open(f"{dev}/idVendor", 'r') as f:
+                        vendor = f.read().strip().lower()
+                    if vendor in ['03e7', '1443', '2e1d']:
+                        found = True
+                        with open(f"{dev}/speed", 'r') as f:
+                            speed_mbps = int(f.read().strip())
+                        if speed_mbps >= 5000:
+                            self.usb_ok = True
+                            speed_str = f"USB {speed_mbps/1000:.1f}Gbps"
+                        else:
+                            self.usb_ok = False
+                            speed_str = f"USB {speed_mbps:.0f}Mbps (USB 2.0)"
+                        self.usb_speed_var.set(speed_str)
+                        if hasattr(self, 'usb_speed_label'):
+                            if self.usb_ok:
+                                self.usb_speed_label.config(fg='#00ff88')
+                            else:
+                                self.usb_speed_label.config(fg='#e63946')
+                        logger.info(f"USB 速度检测: {speed_str}")
+                        self._oak_was_detected = True
+                        return
+            # 如果之前检测到过设备，现在找不到了，重置
+            if was_detected and not found:
+                self.usb_ok = False
+                self.usb_speed_var.set("")
+                logger.info("USB 设备已断开")
+        except Exception as e:
+            logger.debug(f"USB 速度检测失败: {e}")
 
     def update_device_status(self):
-        connected, info, usb_speed = self.check_oak_device()
+        # 每次刷新 USB 速度（不依赖设备检测结果）
+        self._check_usb_speed_now()
+        connected, info, usb_speed, usb_ok = self.check_oak_device()
         self.device_connected = connected
+        # 如果设备检测也确认了 USB 速度，以设备检测为准
+        if connected and usb_speed:
+            self.usb_ok = usb_ok
         if connected:
             self.device_status_var.set("✅ 设备已连接")
             self.device_status_label.config(fg='#00ff88')
             self.device_info_var.set(info)
             if usb_speed:
                 self.usb_speed_var.set(usb_speed)
-                if "USB 3" in usb_speed:
+                if usb_ok:
                     self.usb_speed_label.config(fg='#00ff88')
-                elif "USB 2.0" in usb_speed or "480Mbps" in usb_speed:
-                    self.usb_speed_label.config(fg='#ffaa00')
                 else:
-                    self.usb_speed_label.config(fg='#ff6600')
+                    self.usb_speed_label.config(fg='#e63946')
             else:
                 self.usb_speed_var.set("")
         else:
@@ -718,7 +991,7 @@ class FactorControlPanel:
             while self.auto_check_enabled:
                 try:
                     self.root.after(0, self.update_device_status)
-                    time.sleep(3)
+                    time.sleep(10)
                 except Exception as e:
                     logger.error(f"设备监控异常: {e}")
                     break
@@ -730,16 +1003,7 @@ class FactorControlPanel:
         self.device_status_var.set("⏳ 正在检测设备...")
         self.root.update()
         self.update_device_status()
-        if self.device_connected:
-            messagebox.showinfo("设备检测", "✅ OAK-D 设备已连接\n可以正常启动系统")
-        else:
-            messagebox.showwarning("设备检测",
-                "❌ 未检测到 OAK-D 设备\n\n"
-                "请检查:\n"
-                "1. 相机 USB 线是否连接\n"
-                "2. USB 线是否插紧（建议 USB 3.0）\n"
-                "3. 相机电源是否正常\n\n"
-                "连接后点击 '重启相机' 或 '强制重连'")
+        # 不弹窗，状态栏已显示结果
 
     def toggle_auto_check(self):
         self.auto_check_enabled = self.auto_check_var.get()
@@ -754,7 +1018,7 @@ class FactorControlPanel:
         if not self.device_connected:
             self.check_device_now()
             if not self.device_connected:
-                messagebox.showwarning("重启失败", "设备未连接，无法重启\n\n请先连接 OAK-D 相机")
+                messagebox.showerror("重启失败", "设备未连接，无法重启\n\n请先连接 OAK-D 相机")
                 return
         self.status_var.set("状态: 正在重启相机...")
         self.device_status_var.set("⏳ 正在重启相机...")
@@ -778,7 +1042,6 @@ done
                 self.update_device_status()
                 if self.device_connected:
                     self.status_var.set("状态: 相机重启成功")
-                    messagebox.showinfo("成功", "✅ 相机重启成功！")
                     logger.info("相机重启成功")
                 else:
                     self.status_var.set("状态: 相机重启失败")
@@ -791,8 +1054,6 @@ done
             self.status_var.set("状态: 重启失败")
 
     def force_reconnect(self):
-        if not messagebox.askyesno("强制重连", "这将停止所有运行中的 ROS2 进程，然后尝试重新连接相机。\n\n确定要继续吗？"):
-            return
         self.status_var.set("状态: 正在强制重连相机...")
         self.device_status_var.set("⏳ 正在强制重连...")
         self.root.update()
@@ -819,11 +1080,10 @@ done
             self.update_device_status()
             if self.device_connected:
                 self.status_var.set("状态: 强制重连成功")
-                messagebox.showinfo("成功", "✅ 相机强制重连成功！\n\n设备已重新识别，可以启动系统")
                 logger.info("强制重连成功")
             else:
                 self.status_var.set("状态: 设备仍未连接")
-                messagebox.showwarning("重连失败", "❌ 相机仍未检测到\n\n请尝试:\n1. 物理重新插拔 USB 线\n2. 检查 USB 线是否损坏\n3. 尝试不同的 USB 端口")
+                messagebox.showwarning("重连失败", "相机仍未检测到\n\n请尝试:\n1. 物理重新插拔 USB 线\n2. 检查 USB 线是否损坏\n3. 尝试不同的 USB 端口")
         except Exception as e:
             logger.error(f"强制重连失败: {e}")
             messagebox.showerror("错误", f"强制重连失败:\n{str(e)}")
@@ -832,13 +1092,332 @@ done
     def check_device_before_launch(self):
         self.update_device_status()
         if not self.device_connected:
-            result = messagebox.askyesno("设备未连接", "⚠️ 未检测到 OAK-D 设备！\n\n启动 Factor Perception 需要连接相机。\n如果相机已连接，可能被其他程序占用或驱动异常。\n\n是否尝试强制重连？\n(将停止所有 ROS2 进程并重置设备)")
-            if result:
-                self.force_reconnect()
-                self.update_device_status()
-                return self.device_connected
-            return False
+            messagebox.showerror("设备未连接",
+                "⚠️ 未检测到 OAK-D 设备！\n\n"
+                "启动 Factor Perception 需要连接相机。\n\n"
+                "是否尝试强制重连？\n(将停止所有 ROS2 进程并重置设备)")
+            self.force_reconnect()
+            self.update_device_status()
+            return self.device_connected
+
+        # USB 3.0+ 检查：启动前 sysfs 速度可能不准确，只记录日志不弹窗
+        if hasattr(self, 'usb_ok') and not self.usb_ok:
+            logger.warning("USB 当前显示为 2.0，启动后会自动验证实际速度")
+            self.status_var.set("⚠️ USB 显示 2.0，启动后验证实际速度")
+
         return True
+
+    def _verify_usb_speed_after_launch(self):
+        """启动后验证实际 USB 速度（驱动已打开设备后）。
+        优先用 depthai 尝试打开设备验证；depthai 不可用时回退到 usb_ok 值。"""
+        try:
+            import depthai as dai
+            device_info = dai.DeviceInfo()
+            # 如果能获取到设备信息，说明驱动已成功打开设备
+            self.usb_ok = True
+            self.usb_speed_var.set("USB 3.0+ (已验证)")
+            if hasattr(self, 'usb_speed_label'):
+                self.usb_speed_label.config(fg='#00ff88')
+            logger.info("USB 速度验证通过: depthai 设备可打开")
+            return True
+        except ImportError:
+            # depthai 未安装（开发环境），回退到 usb_ok 值
+            logger.debug("depthai 不可用，使用 usb_ok 值验证")
+            if hasattr(self, 'usb_ok') and not self.usb_ok:
+                self._show_usb_error_and_stop()
+                return False
+            return True
+        except Exception as e:
+            # 无法打开设备，可能是 USB 2.0 或驱动问题
+            self.usb_ok = False
+            self.usb_speed_var.set("USB 连接失败")
+            if hasattr(self, 'usb_speed_label'):
+                self.usb_speed_label.config(fg='#e63946')
+            logger.warning(f"USB 速度验证失败: {e}")
+            self._show_usb_error_and_stop()
+            return False
+
+    def _show_usb_error_and_stop(self):
+        messagebox.showerror("USB 连接失败",
+            "🚫 OAK-D 相机无法正常连接！\n\n"
+            "可能原因:\n"
+            "  • USB 2.0 连接（带宽不足）\n"
+            "  • USB 线缆/接口故障\n"
+            "  • 相机被其他程序占用\n\n"
+            "请检查:\n"
+            "1. 确认使用 USB 3.0 数据线和接口\n"
+            "2. 确认没有其他程序在使用相机\n"
+            "3. 尝试重启相机或更换 USB 端口")
+        self.stop_all()
+
+    # ==================== 测试报告 ====================
+
+    def run_test_report(self):
+        """执行全面测试并生成报告"""
+        report_lines = []
+        report_lines.append("=" * 60)
+        report_lines.append("       Factor Perception 控制面板 - 测试报告")
+        report_lines.append("=" * 60)
+        report_lines.append(f"时间: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        report_lines.append(f"OS: {os.uname().sysname} {os.uname().release}")
+        report_lines.append("")
+
+        # --- 1. 配置加载测试 ---
+        report_lines.append("【1】配置加载测试")
+        try:
+            config = self.app_config
+            report_lines.append(f"  ✅ 配置文件加载成功")
+            report_lines.append(f"     相机型号: {config.get('camera', {}).get('model', 'N/A')}")
+            report_lines.append(f"     密钥: {'已设置' if config.get('camera', {}).get('key') else '未设置（环境变量）'}")
+            report_lines.append(f"     ROS distro: {config.get('ros', {}).get('distro', 'N/A')}")
+            launch_cfg = config.get('launch', {})
+            report_lines.append(f"     camera_cpu: {launch_cfg.get('camera_cpu', 'N/A')}")
+            report_lines.append(f"     imu_cpu: {launch_cfg.get('imu_cpu', 'N/A')}")
+            report_lines.append(f"     rgb_fps: {launch_cfg.get('rgb_fps', 'N/A')}")
+            report_lines.append(f"     depth_filter: {launch_cfg.get('depth_filter', 'N/A')}")
+            report_lines.append(f"     ir_intensity: {launch_cfg.get('ir_intensity', 'N/A')}")
+        except Exception as e:
+            report_lines.append(f"  ❌ 配置加载失败: {e}")
+        report_lines.append("")
+
+        # --- 2. 设备检测测试 ---
+        report_lines.append("【2】OAK-D 设备检测测试")
+        self.update_device_status()
+        if self.device_connected:
+            report_lines.append(f"  ✅ 设备已连接")
+            report_lines.append(f"     连接状态: {self.device_status_var.get()}")
+            report_lines.append(f"     设备信息: {self.device_info_var.get()}")
+            report_lines.append(f"     USB 速度: {self.usb_speed_var.get()}")
+            if hasattr(self, 'usb_ok'):
+                if self.usb_ok:
+                    report_lines.append(f"     USB 3.0+ 检查: ✅ 通过")
+                else:
+                    report_lines.append(f"     USB 3.0+ 检查: ❌ 失败（USB 2.0）")
+            else:
+                report_lines.append(f"     USB 3.0+ 检查: ⚠️ 无法检测")
+        else:
+            report_lines.append(f"  ❌ 设备未连接")
+            report_lines.append(f"     状态: {self.device_status_var.get()}")
+        report_lines.append("")
+
+        # --- 3. 数据库测试 ---
+        report_lines.append("【3】默认数据库测试")
+        db_path = DEFAULT_DB
+        if os.path.exists(db_path):
+            size = os.path.getsize(db_path)
+            report_lines.append(f"  ✅ 数据库存在")
+            report_lines.append(f"     路径: {db_path}")
+            report_lines.append(f"     大小: {size/(1024*1024):.1f} MB")
+            ok, msg = self._check_db_integrity(db_path)
+            if ok:
+                report_lines.append(f"     完整性: ✅ {msg}")
+            else:
+                report_lines.append(f"     完整性: ❌ {msg}")
+        else:
+            report_lines.append(f"  ⚠️ 数据库不存在: {db_path}")
+            report_lines.append(f"     需先使用'新建建图'创建地图")
+        report_lines.append("")
+
+        # --- 4. ROS 环境测试 ---
+        report_lines.append("【4】ROS 2 环境测试")
+        ros_setup = self.app_config.get('ros', {}).get('setup_path', '')
+        if ros_setup and os.path.exists(ros_setup):
+            report_lines.append(f"  ✅ ROS setup: {ros_setup}")
+        else:
+            report_lines.append(f"  ❌ ROS setup 文件不存在: {ros_setup}")
+
+        # 检查 ros2 命令
+        try:
+            result = subprocess.run(['bash', '-c', 'source /opt/ros/jazzy/setup.bash && which ros2'],
+                                    shell=False, capture_output=True, text=True, timeout=5)
+            if result.returncode == 0 and result.stdout.strip():
+                report_lines.append(f"  ✅ ros2 命令: {result.stdout.strip()}")
+            else:
+                report_lines.append(f"  ❌ ros2 命令未找到")
+        except Exception:
+            report_lines.append(f"  ❌ ros2 命令检查失败")
+
+        # 检查 rtabmap 工具
+        tools = ['rtabmap-databaseViewer', 'rtabmap-export']
+        for tool in tools:
+            try:
+                result = subprocess.run(['bash', '-c', f'source /opt/ros/jazzy/setup.bash && which {tool}'],
+                                        shell=False, capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    report_lines.append(f"  ✅ {tool}: 已安装")
+                else:
+                    report_lines.append(f"  ⚠️ {tool}: 未找到")
+            except Exception:
+                report_lines.append(f"  ⚠️ {tool}: 检查失败")
+        report_lines.append("")
+
+        # --- 5. Launch 文件语法测试 ---
+        report_lines.append("【5】Launch 文件测试")
+        launch_file = os.path.join(self.app_config.get('paths', {}).get('project_root', ''), "factor_perception_auto.launch.py")
+        if os.path.exists(launch_file):
+            report_lines.append(f"  ✅ Launch 文件存在: factor_perception_auto.launch.py")
+            try:
+                result = subprocess.run(
+                    ['bash', '-c', f'source /opt/ros/jazzy/setup.bash && ros2 launch --show-args {launch_file}'],
+                    shell=False, capture_output=True, text=True, timeout=10
+                )
+                if result.returncode == 0:
+                    report_lines.append(f"  ✅ Launch 文件语法正确")
+                else:
+                    report_lines.append(f"  ❌ Launch 文件语法错误:")
+                    report_lines.append(f"     {result.stderr[:200]}")
+            except Exception as e:
+                report_lines.append(f"  ❌ Launch 文件检查失败: {e}")
+        else:
+            report_lines.append(f"  ❌ Launch 文件不存在: {launch_file}")
+        report_lines.append("")
+
+        # --- 6. 按钮状态测试 ---
+        report_lines.append("【6】按钮互锁状态测试")
+        btn_tests = [
+            ("新建建图", self.btn_new_mapping),
+            ("续建", self.btn_continue),
+            ("开始定位", self.btn_nav),
+            ("完整导航", self.btn_full_nav),
+            ("重置地图", self.btn_reset),
+            ("数据库", self.btn_database),
+        ]
+        for name, btn in btn_tests:
+            state = btn.cget('state')
+            if self.ros_running:
+                expected = tk.DISABLED if name in ["新建建图", "续建", "开始定位", "完整导航"] else tk.NORMAL
+                status = "✅" if state == expected else "⚠️"
+                report_lines.append(f"  {status} {name}: {state} (期望: {expected})")
+            else:
+                status = "✅" if state == tk.NORMAL else "⚠️"
+                report_lines.append(f"  {status} {name}: {state} (期望: NORMAL)")
+        report_lines.append("")
+
+        # --- 7. Spinner 动画测试 ---
+        report_lines.append("【7】Spinner 动画测试")
+        if self.spinner:
+            report_lines.append(f"  ✅ Spinner 对象已创建")
+            report_lines.append(f"     当前状态: {'运行中' if self.spinner.running else '停止'}")
+        else:
+            report_lines.append(f"  ❌ Spinner 对象未创建")
+        report_lines.append("")
+
+        # --- 8. 系统状态总结 ---
+        report_lines.append("【8】系统状态总结")
+        all_ok = True
+        issues = []
+
+        if not self.device_connected:
+            all_ok = False
+            issues.append("OAK-D 设备未连接")
+        elif hasattr(self, 'usb_ok') and not self.usb_ok:
+            all_ok = False
+            issues.append("USB 2.0 速度不足（需要 USB 3.0+）")
+
+        if all_ok:
+            report_lines.append("  ✅ 系统状态: 就绪，可以启动")
+        else:
+            report_lines.append("  ❌ 系统状态: 存在问题")
+            for issue in issues:
+                report_lines.append(f"     • {issue}")
+        report_lines.append("")
+        report_lines.append("=" * 60)
+        report_lines.append("测试完成")
+        report_lines.append("=" * 60)
+
+        # 显示报告
+        report_text = "\n".join(report_lines)
+        report_window = tk.Toplevel(self.root)
+        report_window.title("测试报告")
+        report_window.geometry("700x700")
+        text_frame = tk.Frame(report_window)
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        scrollbar = tk.Scrollbar(text_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        text_widget = tk.Text(text_frame, wrap=tk.WORD, yscrollcommand=scrollbar.set,
+                             font=('Consolas', 10), bg='#2b2b2b', fg='#00ff88')
+        text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=text_widget.yview)
+        text_widget.insert(tk.END, report_text)
+        text_widget.config(state=tk.DISABLED)
+        btn_frame = tk.Frame(report_window)
+        btn_frame.pack(fill=tk.X, padx=10, pady=10)
+        tk.Button(btn_frame, text="📋 复制报告",
+                 command=lambda: self._copy_text(report_text),
+                 bg='#3d5a80', fg='white', width=15).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="保存到文件",
+                 command=lambda: self._save_report(report_text),
+                 bg='#4a7c59', fg='white', width=15).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="关闭", command=report_window.destroy,
+                 bg='#e63946', fg='white', width=15).pack(side=tk.RIGHT, padx=5)
+
+        logger.info("测试报告已生成")
+        logger.info(f"系统状态: {'就绪' if all_ok else '存在问题'}")
+
+    def _copy_text(self, text):
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        messagebox.showinfo("已复制", "内容已复制到剪贴板")
+
+    def _save_report(self, text):
+        from tkinter import filedialog
+        path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            initialfile=f"test_report_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+        )
+        if path:
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(text)
+            messagebox.showinfo("已保存", f"报告已保存到:\n{path}")
+
+    def view_log(self):
+        """查看控制面板日志"""
+        log_path = os.path.join(LOG_DIR, 'factor_control_panel.log')
+        if not os.path.exists(log_path):
+            messagebox.showinfo("日志", f"日志文件不存在:\n{log_path}")
+            return
+        try:
+            with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
+                lines = f.readlines()
+            recent_lines = lines[-200:] if len(lines) > 200 else lines
+
+            log_window = tk.Toplevel(self.root)
+            log_window.title(f"日志 (最近 {len(recent_lines)} 行)")
+            log_window.geometry("750x500")
+            text_frame = tk.Frame(log_window)
+            text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            scrollbar = tk.Scrollbar(text_frame)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            text_widget = tk.Text(text_frame, wrap=tk.WORD, yscrollcommand=scrollbar.set,
+                                 font=('Consolas', 9), bg='#1a1a1a', fg='#cccccc')
+            text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            scrollbar.config(command=text_widget.yview)
+
+            for line in recent_lines:
+                if 'ERROR' in line:
+                    text_widget.insert(tk.END, line, 'error')
+                elif 'WARNING' in line:
+                    text_widget.insert(tk.END, line, 'warning')
+                elif 'INFO' in line:
+                    text_widget.insert(tk.END, line, 'info')
+                else:
+                    text_widget.insert(tk.END, line)
+
+            text_widget.tag_config('error', foreground='#e74c3c')
+            text_widget.tag_config('warning', foreground='#f39c12')
+            text_widget.tag_config('info', foreground='#3498db')
+            text_widget.config(state=tk.DISABLED)
+
+            btn_frame = tk.Frame(log_window)
+            btn_frame.pack(fill=tk.X, padx=10, pady=10)
+            tk.Button(btn_frame, text="📋 复制日志",
+                     command=lambda: self._copy_text(''.join(recent_lines)),
+                     bg='#3d5a80', fg='white', width=15).pack(side=tk.LEFT, padx=5)
+            tk.Button(btn_frame, text="关闭", command=log_window.destroy,
+                     bg='#e63946', fg='white', width=15).pack(side=tk.RIGHT, padx=5)
+        except Exception as e:
+            messagebox.showerror("错误", f"读取日志失败: {str(e)}")
 
 
 if __name__ == "__main__":

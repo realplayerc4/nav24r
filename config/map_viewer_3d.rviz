@@ -1,7 +1,7 @@
 Panels:
   - Class: rviz_common/Displays
     Help Height: 70
-    Name: 地图观察器
+    Name: 地图观察器 (障碍物高度 0.2~1.4m)
     Property Tree Widget:
       Expanded:
         - /3D 点云地图1

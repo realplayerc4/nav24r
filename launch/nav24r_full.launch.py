@@ -2,7 +2,7 @@
 # 人形机器人导航系统
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction, SetEnvironmentVariable
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, EnvironmentVariable, TextSubstitution
 from launch_ros.actions import ComposableNodeContainer, Node
@@ -42,9 +42,9 @@ def generate_launch_description():
         description='Camera yaw rotation (radians)')
     publish_tf_arg = DeclareLaunchArgument('publish_tf', default_value='true',
         description='Publish camera TF transforms')
-    depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='false',
+    depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='true',
         description='Enable depth image filtering')
-    ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.4',
+    ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.8',
         description='IR illumination intensity (0.0-1.0)')
     min_feat_depth_arg = DeclareLaunchArgument('min_feat_depth', default_value='0.0',
         description='Minimum depth for feature extraction (meters)')
@@ -211,6 +211,7 @@ def generate_launch_description():
     # ============ 返回 LaunchDescription ============
 
     return LaunchDescription([
+        SetEnvironmentVariable('QT_QPA_PLATFORM', 'xcb'),  # Wayland 兼容 Qt
         # Factor Perception 参数
         camera_model_arg,
         mxid_or_name_arg,

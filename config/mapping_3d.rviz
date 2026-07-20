@@ -1,11 +1,9 @@
 Panels:
   - Class: rviz_common/Displays
     Help Height: 70
-    Name: 3D 建图模式
+    Name: 3D 建图模式 (障碍物高度 0.2~1.4m, 相机高 0.85m)
     Property Tree Widget:
       Expanded:
-        - /障碍物点云1
-        - /地面点云1
         - /Octomap 3D1
         - /2D地图1
         - /TF1
@@ -14,18 +12,20 @@ Panels:
 Visualization Manager:
   Class: ""
   Displays:
-    # 障碍物点云 - 红色
-    - Alpha: 0.8
-      Autocompute Intensity Bounds: true
+    # Octomap 3D - 仅 0.2~1.4m 障碍物 (相机高 0.85m)
+    - Alpha: 0.7
       Class: rviz_default_plugins/PointCloud2
-      Color: 255; 80; 80
-      Color Transformer: FlatColor
+      Color: 200; 200; 200
+      Color Transformer: AxisColor  # 按高度着色
+      Axis: Z
+      Max Intensity: 1.4
+      Min Intensity: 0.2
       Decay Time: 0
       Enabled: true
-      Name: 障碍物点云
-      Size (Pixels): 3
-      Size (m): 0.05
-      Style: Flat Squares
+      Name: Octomap 3D (0.2~1.4m)
+      Size (Pixels): 4
+      Size (m): 0.08
+      Style: Boxes
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -35,50 +35,6 @@ Visualization Manager:
         Value: /factor_perception/cloud_obstacles
       Use Fixed Frame: true
       Value: true
-
-    # 地面点云 - 绿色
-    - Alpha: 0.6
-      Autocompute Intensity Bounds: true
-      Class: rviz_default_plugins/PointCloud2
-      Color: 80; 200; 80
-      Color Transformer: FlatColor
-      Decay Time: 0
-      Enabled: true
-      Name: 地面点云
-      Size (Pixels): 3
-      Size (m): 0.03
-      Style: Flat Squares
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /factor_perception/cloud_ground
-      Use Fixed Frame: true
-      Value: true
-
-    # 全局点云地图 - 蓝色（可选）
-    - Alpha: 0.5
-      Autocompute Intensity Bounds: true
-      Class: rviz_default_plugins/PointCloud2
-      Color: 100; 100; 200
-      Color Transformer: FlatColor
-      Decay Time: 0
-      Enabled: false
-      Name: 全局点云地图
-      Size (Pixels): 2
-      Size (m): 0.02
-      Style: Flat Squares
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /factor_perception/cloud_map
-      Use Fixed Frame: true
-      Value: false
 
     # 2D 占用地图
     - Alpha: 0.7

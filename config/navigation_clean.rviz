@@ -1,27 +1,27 @@
 Panels:
   - Class: rviz_common/Displays
-    Name: 导航模式 (障碍物高度 0.2~1.4m, 相机高 0.85m)
+    Name: 导航模式 (障碍物 0.2~1.4m)
     Property Tree Widget:
       Expanded:
-        - /障碍物点云1
         - /2D地图1
+        - /Global Costmap1
+        - /Local Costmap1
         - /导航路径1
-
-Visualization Manager:
-  Class: ""
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: 俯视图
+      Scale: 100
+      Target Frame: base_link
+      X: 0
+      Y: 0
   Displays:
-    # ====== 点云显示 ======
-    # 障碍物点云 (高度过滤 0.2~1.4m, 相机高 0.85m)
-    - Class: rviz_default_plugins/PointCloud2
-      Name: 障碍物点云
-      Topic: /factor_perception/cloud_obstacles
-      Size (m): 0.05
-      Color Transformer: FlatColor
-      Color: 255; 80; 80
-      Alpha: 0.8
-      Enabled: true
-
-    # ====== 地图显示 ======
+    # ====== 核心：2D 占用地图 ======
     - Class: rviz_default_plugins/Map
       Name: 2D地图
       Topic: /factor_perception/map
@@ -29,16 +29,16 @@ Visualization Manager:
       Alpha: 0.7
       Enabled: true
 
-    # ====== Costmap 显示 ======
+    # ====== 核心：Nav2 代价地图 ======
     - Class: rviz_default_plugins/Map
-      Name: Global Costmap
+      Name: Global Costmap (0.2~1.4m)
       Topic: /global_costmap/costmap
       Color Scheme: costmap
       Alpha: 0.5
       Enabled: true
 
     - Class: rviz_default_plugins/Map
-      Name: Local Costmap
+      Name: Local Costmap (0.2~1.4m)
       Topic: /local_costmap/costmap
       Color Scheme: costmap
       Alpha: 0.5
@@ -59,23 +59,7 @@ Visualization Manager:
       Alpha: 0.8
       Enabled: true
 
-    # ====== TF 显示 ======
-    - Class: rviz_default_plugins/TF
-      Name: TF
-      Show Arrows: false
-      Show Names: true
-      Show Axes: true
-      Enabled: true
-
-    # ====== 参考网格 ======
-    - Class: rviz_default_plugins/Grid
-      Name: 网格
-      Reference Frame: map
-      Plane Cell Count: 40
-      Color: 160; 160; 160
-      Enabled: true
-
-    # ====== 机器人位置 ======
+    # ====== 位姿 ======
     - Class: rviz_default_plugins/Pose
       Name: 当前位姿
       Topic: /factor_perception/localization_pose
@@ -83,17 +67,46 @@ Visualization Manager:
       Color: 255; 255; 0
       Enabled: true
 
-    # ====== 目标点 ======
     - Class: rviz_default_plugins/PoseStamped
       Name: 导航目标
       Topic: /goal_pose
       Color: 255; 0; 255
       Enabled: true
 
-  Global Options:
-    Background Color: 48; 48; 48
-    Fixed Frame: map
-    Frame Rate: 30
+    # ====== TF ======
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Show Arrows: false
+      Show Names: true
+      Show Axes: true
+      Enabled: true
+
+    # ====== 网格 ======
+    - Class: rviz_default_plugins/Grid
+      Name: 网格
+      Reference Frame: map
+      Plane Cell Count: 40
+      Color: 160; 160; 160
+      Enabled: true
+
+    # ====== 点云（默认关闭，需要时手动开启）======
+    - Class: rviz_default_plugins/PointCloud2
+      Name: 障碍物点云 (0.2~1.4m)
+      Topic: /factor_perception/cloud_obstacles
+      Size (m): 0.05
+      Color Transformer: FlatColor
+      Color: 255; 80; 80
+      Alpha: 0.8
+      Enabled: false
+
+    - Class: rviz_default_plugins/PointCloud2
+      Name: 地面点云 (<0.2m)
+      Topic: /factor_perception/cloud_ground
+      Size (m): 0.03
+      Color Transformer: FlatColor
+      Color: 80; 200; 80
+      Alpha: 0.6
+      Enabled: false
 
   Tools:
     - Class: rviz_default_plugins/Interact
@@ -103,15 +116,6 @@ Visualization Manager:
       Topic: /factor_perception/initialpose
     - Class: rviz_default_plugins/SetGoalPose
       Topic: /goal_pose
-
-  Views:
-    Current:
-      Class: rviz_default_plugins/TopDownOrtho
-      Scale: 100
-      Target Frame: base_link
-      X: 0
-      Y: 0
-      Name: 俯视图
 
 Window Geometry:
   Displays:

@@ -1,7 +1,7 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
 from launch.conditions import IfCondition, UnlessCondition
-from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, EnvironmentVariable, TextSubstitution
+from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, EnvironmentVariable, TextSubstitution
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.substitutions import FindPackageShare
@@ -21,8 +21,8 @@ def generate_launch_description():
     cam_pitch_arg = DeclareLaunchArgument('cam_pitch', default_value='0.0')
     cam_yaw_arg = DeclareLaunchArgument('cam_yaw', default_value='0.0')
     publish_tf_arg = DeclareLaunchArgument('publish_tf', default_value='true')
-    depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='false')
-    ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.4')
+    depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='true')
+    ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.8')
     min_feat_depth_arg = DeclareLaunchArgument('min_feat_depth', default_value='0.0')
     camera_cpu_arg = DeclareLaunchArgument('camera_cpu', default_value='-1')
     imu_cpu_arg = DeclareLaunchArgument('imu_cpu', default_value='-1')
@@ -89,21 +89,26 @@ def generate_launch_description():
         ])),
     )
 
+    slam_params = {
+        'subscribe_rgb': False,
+        'subscribe_depth': False,
+        'subscribe_rgbd': True,
+        'frame_id': LaunchConfiguration('base_frame_id'),
+        'odom_frame_id_init': LaunchConfiguration('odom_frame_id'),
+        'sync_queue_size': 50,
+        'config_path': LaunchConfiguration('config_path'),
+        'database_path': LaunchConfiguration('database_path'),
+        'RGBD/ProximityBySpace': 'true',
+        'RGBD/ProximityByTime': 'true',
+    }
+
     rtabmap_slam = ComposableNode(
         package='rtabmap_slam',
         plugin='rtabmap_slam::CoreWrapper',
         name='rtabmap',
         namespace='factor_perception',
         condition=UnlessCondition(LaunchConfiguration('localization')),
-        parameters=[{
-            'subscribe_rgb': False,
-            'subscribe_depth': False,
-            'subscribe_rgbd': True,
-            'frame_id': LaunchConfiguration('base_frame_id'),
-            'odom_frame_id_init': LaunchConfiguration('odom_frame_id'),
-            'sync_queue_size': 50,
-            'config_path': LaunchConfiguration('config_path'),
-            'database_path': LaunchConfiguration('database_path'),
+        parameters=[slam_params, {
             'Mem/IncrementalMemory': 'true',
             'Mem/InitWMWithAllNodes': 'false',
         }],
@@ -115,15 +120,7 @@ def generate_launch_description():
         name='rtabmap',
         namespace='factor_perception',
         condition=IfCondition(LaunchConfiguration('localization')),
-        parameters=[{
-            'subscribe_rgb': False,
-            'subscribe_depth': False,
-            'subscribe_rgbd': True,
-            'frame_id': LaunchConfiguration('base_frame_id'),
-            'odom_frame_id_init': LaunchConfiguration('odom_frame_id'),
-            'sync_queue_size': 50,
-            'config_path': LaunchConfiguration('config_path'),
-            'database_path': LaunchConfiguration('database_path'),
+        parameters=[slam_params, {
             'Mem/IncrementalMemory': 'false',
             'Mem/InitWMWithAllNodes': 'true',
         }],
@@ -154,6 +151,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        SetEnvironmentVariable('QT_QPA_PLATFORM', 'xcb'),  # Wayland 兼容 Qt
         camera_model_arg,
         mxid_or_name_arg,
         key_arg,

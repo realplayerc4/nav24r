@@ -6,7 +6,7 @@ Visualization Manager:
   Class: ""
   Displays:
     - Class: rviz_default_plugins/PointCloud2
-      Name: Obstacles
+      Name: Obstacles (高度 0.2~1.4m)
       Topic: /factor_perception/cloud_obstacles
       Size (m): 0.05
       Color Transformer: FlatColor

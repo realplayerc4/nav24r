@@ -1,14 +1,15 @@
 Panels:
   - Class: rviz_common/Displays
     Help Height: 70
-    Name: 建图模式
+    Name: 建图模式 (障碍物高度 0.2~1.4m, 相机高 0.85m)
     Property Tree Widget:
       Expanded:
         - /障碍物点云1
         - /2D地图1
         - /TF1
+        - /网格1
       Splitter Ratio: 0.5
-    Tree Height: 574
+    Tree Height: 1139
 Visualization Manager:
   Class: ""
   Displays:
@@ -24,7 +25,7 @@ Visualization Manager:
       Color: 255; 80; 80
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -39,13 +40,12 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Volatile
-        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /factor_perception/cloud_obstacles
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
     - Alpha: 0.6000000238418579
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -58,7 +58,7 @@ Visualization Manager:
       Color: 80; 200; 80
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -73,13 +73,12 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Volatile
-        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /factor_perception/cloud_ground
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
     - Alpha: 0.5
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -107,7 +106,6 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Volatile
-        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /factor_perception/cloud_map
@@ -115,6 +113,8 @@ Visualization Manager:
       Use rainbow: true
       Value: false
     - Alpha: 0.699999988079071
+      Binary representation: false
+      Binary threshold: 100
       Class: rviz_default_plugins/Map
       Color Scheme: map
       Draw Behind: false
@@ -137,6 +137,8 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/TF
       Enabled: true
+      Filter (blacklist): ""
+      Filter (whitelist): ""
       Frame Timeout: 15
       Frames:
         All Enabled: true
@@ -164,9 +166,7 @@ Visualization Manager:
           Value: true
         odom:
           Value: true
-        world:
-          Value: true
-      Marker Scale: 1
+      Marker Scale: 5
       Name: TF
       Show Arrows: true
       Show Axes: true
@@ -246,7 +246,6 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Volatile
-        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /factor_perception/initialpose
@@ -266,19 +265,19 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 111.09355163574219
+      Scale: 45.41871643066406
       Target Frame: map
       Value: TopDownOrtho (rviz_default_plugins)
       X: 0
       Y: 0
     Saved: ~
 Window Geometry:
-  Height: 800
+  Height: 1371
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd00000001000000000000023d000002c6fc0200000001fb000000085efa56fe6a215f0f010000003d000002c6000000ce00ffffff0000026d000002c600000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
-  Width: 1200
-  X: 234
-  Y: 90
-  建图模式:
+  QMainWindow State: 000000ff00000000fd00000001000000000000023d000004fdfc0200000002fb000000085efa56fe6a215f0f010000003d000002c60000000000000000fb000000405efa56fe6a215f0f00200028969c788d72699ad85ea600200030002e0032007e0031002e0034006d002c002076f8673a9ad800200030002e00380035006d0029010000003f000004fd000000d000ffffff0000077b000004fd00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Width: 2494
+  X: 66
+  Y: 32
+  建图模式 (障碍物高度 0.2~1.4m, 相机高 0.85m):
     collapsed: false
