@@ -15,13 +15,13 @@
 - **✅ 视觉感知** - OAK-D Pro 相机集成，支持 VIO 200Hz
 - **✅ SLAM 建图** - RTAB-Map 实时建图，支持 3D Octomap
 - **✅ 自主导航** - Nav2 导航栈，路径规划与避障
-- **✅ 地图管理** - 地图质量分析、多格式导出、可视化工具
+- **✅ 地图管理** - 地图质量分析、Octomap 导出、可视化工具
 - **✅ 系统监控** - 控制面板、设备检测、自动恢复
 
 ### 技术亮点
 
 - 🚀 **高性能** - VIO 200Hz，建图 20Hz，实时响应
-- 🛡️ **高稳定性** - 容器隔离、错误恢复、设备检测
+- 🛡️ **高稳定性** - 多线程容器、错误恢复、设备检测
 - 📊 **数据分析** - 地图质量评分系统（100分制）
 - 🔧 **易于配置** - 参数集中管理，可视化配置工具
 - 📖 **完善文档** - 中文文档齐全，包含使用指南和技术分析
@@ -68,8 +68,11 @@
    ```
 
 4. **检查相机**
+
+   OAK-D 相机连接状态可在控制面板的"设备状态"中实时查看（每 3 秒自动刷新）。
    ```bash
-   ./scripts/check_camera.sh
+   python3 scripts/factor_control_panel.py
+   # → "设备状态" 区域查看 OAK-D 连接
    ```
 
 ### ⭐ 启动系统（推荐方式）
@@ -84,16 +87,15 @@ python3 scripts/factor_control_panel.py
 
 | 功能 | 说明 |
 |------|------|
-| 🗺️ 新建地图 | 输入地图 ID 后点击“开始建图” |
-| 🔄 续建地图 | 选择已有地图 → 续建 → 开始建图 |
-| 🧭 定位导航 | 选择地图 → 开始导航 |
+| 🗺️ 开始建图 | 点击开始建图（默认数据库 ~/rtabmap.db） |
+| 🧭 开始导航 | 点击开始导航（默认数据库） |
 | 🚀 完整导航 | Factor Perception + RTAB-Map + Nav2 全内容 |
 | 📷 设备状态 | OAK-D 连接状态实时监控（每3秒） |
-| 📊 地图质量分析 | 地图 100 分制评分报告 |
-| 🗺️ 导出 Octomap | 启动 Database Viewer 导出 |
-| 📁 地图分析数据库查看器 | 直接打开 rtabmap-databaseViewer |
+| 📊 地图质量 | 地图质量分析报告 |
+| 🗺️ 导出Octomap | 启动 Database Viewer 导出 |
+| 📁 数据库查看器 | 直接打开 rtabmap-databaseViewer |
 
-> **替代入口（无 GUI 环境）**: `python3 scripts/web_control_panel.py`，在浏览器访问 `http://localhost:5000`
+> **替代入口（无 GUI 环境）**: `python3 scripts/factor_control_panel.py`（同一入口，跨平台兼容）
 
 ---
 
@@ -113,7 +115,7 @@ source install/setup.bash
 ros2 launch nav24r factor_perception_auto.launch.py
 
 # 续建地图
-ros2 launch nav24r factor_perception_auto.launch.py continue_mapping:=true
+ros2 launch nav24r factor_perception_auto.launch.py
 
 # 定位模式
 ros2 launch nav24r factor_perception_auto.launch.py localization:=true
@@ -133,35 +135,51 @@ nav24r/
 ├── 📄 setup.py / setup.cfg                 # colcon 构建配置
 ├── 📄 factor_perception_auto.launch.py     # 根目录 Launch 文件（感知+SLAM）
 │
-├── config/                                 # 配置文件（14个）
-│   ├── rtabmap_custom.ini                 # RTAB-Map 完整参数配置
+├── config/                                 # 配置文件
 │   ├── nav2_params.yaml                   # Nav2 参数
-│   ├── factor_perception_config.yaml      # 感知SDK配置（相机型号/密钥等）
+│   ├── factor_perception_config.yaml      # 感知 SDK 配置
 │   ├── cyclonedds.xml                     # Cyclone DDS 优化
-│   └── *.rviz (6个)                       # 多种 RViz 视角配置
+│   ├── maps_config.json                   # 地图管理配置
+│   ├── rtabmap_light.rviz                 # 轻量化 RViz
+│   ├── rtabmap_config_doc.md              # RTAB-Map 配置文档
+│   ├── mapping.rviz / mapping_3d.rviz     # 建图视角
+│   ├── navigation.rviz                    # 导航视角
+│   ├── octomap.rviz / octomap_3d.rviz     # Octomap 视角
+│   └── map_viewer_3d.rviz                 # 地图观察器
 │
 ├── launch/                                 # Launch 文件
 │   ├── nav24r_full.launch.py              # ✅ 完整系统（感知+SLAM+Nav2）
-│   ├── factor_perception_isolated.launch.py # ✅ 隔离架构（推荐，更稳定）
+│   ├── factor_perception_isolated.launch.py # ✅ 隔离架构（推荐）
 │   └── nav2.launch.py                     # 纯 Nav2
 │
-├── scripts/                                # 工具脚本（19个）
+├── scripts/                                # 工具脚本
 │   ├── factor_control_panel.py            # ⭐ 主入口：tkinter 控制面板
-│   ├── web_control_panel.py               # 替代入口：Web 控制面板（无GUI）
-│   ├── analyze_map_quality.py             # 地图质量分析（100分制）
+│   ├── start_factor.sh                    # 智能启动脚本（建图/定位）
+│   ├── start_rtabmap_light.sh             # 轻量化建图启动
+│   ├── factor_control.sh                  # Shell 快捷启动
+│   ├── analyze_map_quality.py             # 地图质量分析
 │   ├── export_octomap.py                  # Octomap 导出
-│   ├── check_camera.sh                    # OAK-D 设备检测
-│   ├── start_factor.sh / factor_control.sh # 命令行快捷启动
-│   └── diagnose.sh / setup_cyclonedds.sh  # 诊断/配置脚本
+│   ├── mock_odom_publisher.py             # 仿真里程计
+│   ├── mock_pointcloud_publisher.py       # 仿真点云
+│   ├── test_runner.sh                     # 测试运行器
+│   └── test_phase*.sh / test_simulation.py # 分阶段测试脚本
 │
-├── docs/                                   # 文档（24篇）
+├── docs/                                   # 技术文档
+│   ├── ros2_engineering_analysis.md       # ROS2 工程分析
+│   ├── rtabmap_config_doc.md              # RTAB-Map 配置说明
+│   ├── nav2_integration_plan.md           # Nav2 集成方案
+│   ├── nav2_rtabmap_knowledge.md          # Nav2/RTAB-Map 知识要点 ⭐
 │   ├── WORK_SUMMARY_20260615.md           # 工作总结
-│   ├── ros2_engineering_analysis.md       # ROS2工程分析
-│   └── 因子空间感知SDK标准版使用手册.pdf
+│   ├── 因子空间感知SDK标准版使用手册.pdf  # SDK 官方手册
+│   └── ...（控制面板、地图分析、RViz 等使用指南）
 │
+├── factor_perception/                      # Factor Perception SDK（第三方）
 ├── Calibrat/                               # IMU/相机标定工具
+│   └── IMU/                                # IMU 数据与处理脚本
+├── book/                                   # SDK 参考手册
 ├── memory-bank/                            # 架构文档
-└── CHANGELOG.md
+├── CHANGELOG.md
+└── README.md
 ```
 
 ---
@@ -172,7 +190,9 @@ nav24r/
 
 1. **连接相机**
    ```bash
-   ./scripts/check_camera.sh
+   # 通过控制面板的设备状态监控确认 OAK-D 连接
+   python3 scripts/factor_control_panel.py
+   # → "设备状态" 中查看 OAK-D 连接状态
    ```
 
 2. **启动建图**
@@ -182,7 +202,7 @@ nav24r/
    # 选择 "新建地图"
    
    # 或直接启动
-   ros2 launch nav24r factor_perception_auto.launch.py cam_pos_z:=1.0
+    ros2 launch nav24r factor_perception_auto.launch.py cam_pos_z:=0.85
    ```
 
 3. **查看地图**
@@ -230,13 +250,7 @@ nav24r/
 
 ### RTAB-Map 参数
 
-关键配置（`config/rtabmap_custom.ini`）：
-
-| 参数 | 值 | 说明 |
-|------|-----|------|
-| `Grid/3D` | true | 3D 点云地图 |
-| `Grid/MaxObstacleHeight` | 1.5m | 最高障碍物高度 |
-| `GridGlobal/FootprintRadius` | 0.5m | 机器人半径 |
+使用 SDK 自带 `rtabmap.ini`，无自定义覆盖参数。
 
 ### Nav2 参数
 
@@ -285,17 +299,17 @@ nav24r/
 
 #### 3. 组件故障传播 ✅
 - **问题**: 单个组件崩溃影响整个系统
-- **解决**: 容器隔离架构，独立重启
+- **解决**: 使用 `component_container_mt` 单容器多线程架构，平衡性能与稳定性
 
 ### 架构改进
 
-| 特性 | 旧版本 | 新版本 |
-|------|--------|--------|
-| 容器隔离 | 单容器 | 多容器隔离 |
-| 生命周期 | 无 | LifecycleNode |
+| 特性 | 旧版本 | 当前版本 |
+|------|--------|----------|
+| 容器类型 | 单节点进程 | `component_container_mt`（多线程） |
+| 生命周期 | 无 | 标准 composable node |
 | 设备检查 | 无 | 自动检测 |
 | 错误恢复 | 无 | 自动重启 |
-| QoS 配置 | 无 | 显式配置 |
+| IPC 通信 | 进程间 | 进程内 intra-process |
 
 ---
 

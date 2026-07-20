@@ -246,11 +246,10 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Volatile
+        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /factor_perception/initialpose
-    - Class: rviz_default_plugins/SetGoalPose
-      Topic: /factor_perception/goal
   Transformation:
     Current:
       Class: rviz_default_plugins/TF

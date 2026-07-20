@@ -115,7 +115,7 @@ publish_tf = false 时:
 |------|-----|
 | 类型 | bool |
 | 默认 | false |
-| 推荐 | **true** (人形机器人导航) |
+| 推荐 | **false**（按需开启） |
 
 **深入理解:**
 
@@ -804,15 +804,6 @@ htop  # 查看 CPU 使用
 - 层顺序影响
 ```
 
-#### MPPI 控制器
-
-```markdown
-# TODO: 添加 MPPI 调参经验
-- batch_size 与性能平衡
-- cost_weights 调优
-- 运动模型选择
-```
-
 ### 2.3 robot_localization EKF
 
 #### 融合配置
@@ -879,8 +870,7 @@ htop
 
 | 问题 | 可能原因 | 解决方案 |
 |------|----------|----------|
-| TF 树断开 | `publish_tf=True` | 设置为 `False` |
-| 鬼影障碍物 | 深度噪声 | 启用 `depth_filter=True` |
+| TF 树断开 | `publish_tf=True` | 设置为 `false` |
 | VIO 漂移 | 室内暗光 | 增加 `ir_intensity` |
 | 高延迟 | Fast DDS | 使用 Cyclone DDS |
 | TF 时间戳错误 | 时钟漂移 | 安装 Chrony |

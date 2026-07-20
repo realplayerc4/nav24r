@@ -1,5 +1,33 @@
 # 变更日志
 
+## [v2.1.0] - 2026-07-17 - SDK 更新与配置简化
+
+### 🔧 配置更新
+- ✅ 删除 `config/rtabmap_custom.ini`，采用 SDK 自带 `rtabmap.ini`
+- ✅ `cam_pos_z` 更新为 0.85m（相机实际安装高度）
+- ✅ `depth_filter` 关闭（默认 false）
+- ✅ `ir_intensity` 保持 0.4（室内 VIO 稳定性）
+- ✅ 移除 3D 避障自定义参数（Grid/3D, MaxObstacleHeight 等）
+
+### 🚀 Launch 文件简化
+- ✅ `factor_perception_auto.launch.py` 简化为单 `rtabmap_slam` 节点
+- ✅ `nav24r_full.launch.py` 简化为单 `rtabmap_slam` 节点
+- ✅ `factor_perception_isolated.launch.py` 简化为单 `rtabmap_slam` 节点
+- ✅ 移除 `continue_mapping` 参数（RTAB-Map 自动加载已有地图）
+- ✅ 新增暴露 `camera_cpu`、`imu_cpu`、`rgb_fps` 参数
+- ✅ 容器保持 `component_container_mt`
+
+### 📚 文档更新
+- ✅ 更新 `README.md`、`factor_perception/README.md`、`knowledge.md`、`spec.md`
+- ✅ 更新 `config/rtabmap_config_doc.md` 反映 SDK 默认配置
+- ✅ 更新 `scripts/factor_control_panel.py` 和 `start_rtabmap_light.sh`
+- ✅ 更新 `CLAUDE.md` 项目结构
+
+### 🔧 其他
+- ✅ `config/factor_perception_config.yaml` 同步更新参数
+
+---
+
 ## [v2.0.0] - 2026-06-19 - 系统架构优化
 
 ### 🔧 架构改进
@@ -13,10 +41,8 @@
 
 #### 新增文件
 - 📄 `launch/factor_perception_isolated.launch.py` - 隔离架构启动文件
-- 📄 `scripts/check_camera.sh` - OAK-D设备检测脚本
-- 📄 `config/rtabmap_custom.ini` - RTAB-Map自定义配置
-- 📄 `config/rtabmap_light.rviz` - 轻量化RViz配置
-- 📄 `docs/ros2_engineering_analysis.md` - ROS2工程分析报告
+- 📄 `config/rtabmap_light.rviz` - 轻量化 RViz 配置
+- 📄 `docs/ros2_engineering_analysis.md` - ROS2 工程分析报告
 
 #### 控制面板增强
 - ✅ 实时设备状态显示
@@ -68,10 +94,6 @@
 
 #### 工具脚本
 - ✅ `analyze_map_quality.py` - 地图质量分析工具
-- ✅ `create_desktop_icon.py` - 桌面快捷方式创建工具
-- ✅ `setup_cyclonedds.sh` - Cyclone DDS 自动配置脚本
-- ✅ `install_dependencies.sh` - 依赖安装脚本
-- ✅ `test_factor_perception.sh` - Factor Perception 测试脚本
 
 ### 改进
 
@@ -111,7 +133,6 @@
 
 #### 硬件支持
 - ✅ OAK-D Pro 相机
-- ✅ RK3588 开发板（优化配置）
 - ✅ x86_64 平台
 
 ### 已知问题
@@ -167,10 +188,8 @@ echo "export CYCLONEDDS_URI=file:///home/yq/nav24r/config/cyclonedds.xml" >> ~/.
 ### 下一步计划
 
 - [ ] 添加单元测试
-- [ ] 添加 CI/CD 配置
 - [ ] 性能基准测试
-- [ ] 国际化支持（中英文）
-- [ ] Web 控制面板集成
+- [ ] 多机器人支持
 
 ---
 

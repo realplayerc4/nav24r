@@ -1,7 +1,7 @@
 # Factor Perception Nav2 集成指南
 
 **目标硬件**: OAK-D Pro + RK3588 (或 x86 开发机)
-**ROS 2 版本**: Humble
+**ROS 2 版本**: Jazzy
 **Nav2 栈**: Navigation2
 
 ---
@@ -21,7 +21,7 @@ Factor Perception 是 Luxonis OAK-D 系列相机的感知 SDK，提供以下功�
 
 - OAK-D Pro (推荐人形机器人使用)
 - USB 3.0 连接
-- 主机: RK3588 或 x86 Ubuntu 22.04
+- 主机: x86 Ubuntu 24.04
 
 ---
 
@@ -52,8 +52,8 @@ def generate_launch_description():
                 'publish_tf': False,  # 让 robot_localization 处理 odom->base_link
 
                 # 深度配置
-                'depth_filter': True,  # 启用以去除鬼影/噪点
-                'confidence_threshold': 200,  # 深度置信度 (0-255)
+                'depth_filter': False,
+                'confidence_threshold': 200,
 
                 # 红外投射器 (室内/弱光环境)
                 'ir_intensity': 0.4,  # 补光灯强度 (0.0-1.0)
@@ -74,10 +74,9 @@ def generate_launch_description():
 
 | 参数 | 默认值 | 推荐值 | 说明 |
 |------|--------|--------|------|
-| `publish_tf` | `True` | `False` | 禁用以防止与 EKF 的 TF 冲突 |
-| `depth_filter` | `False` | `True` | 人形机器人关键配置 - 防止虚假障碍物 |
-| `ir_intensity` | `0.0` | `0.4` | 改善室内/暗环境下的 VIO 稳定性 |
-| `confidence_threshold` | `200` | `200` | 值越高 = 深度滤波越严格 |
+| `publish_tf` | `true` | `false` | 与 EKF 融合时禁用，避免 TF 冲突 |
+| `depth_filter` | `false` | `false` | 默认关闭；仅在需要时开启 |
+| `ir_intensity` | `0.0` | `0.4` | 改善室内/弱光环境 VIO 稳定性 |
 
 ---
 
@@ -244,47 +243,11 @@ controller_server:
 
 ---
 
-## 7. RK3588 系统优化
-
-### CPU 亲和性 (taskset)
+## 7. 启动顺序
 
 ```bash
-# 将 Factor Perception 绑定到 A76 大核 (RK3588 的核 4-7)
-taskset -c 4-7 ros2 run factor_perception factor_perception_node
-
-# 将 Nav2 MPPI 绑定到剩余大核
-taskset -c 4-7 ros2 run nav2_controller controller_server
-```
-
-### Cyclone DDS 配置
-
-已配置。RK3588 需创建 Cyclone DDS XML 配置：
-
-```xml
-<!-- ~/.cyclonedds.xml -->
-<?xml version="1.0" encoding="UTF-8" ?>
-<CycloneDDS xmlns="https://cdds.io/config" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
-  <Domain id="any">
-    <General>
-      <NetworkInterfaceAddress>auto</NetworkInterfaceAddress>
-      <AllowMulticast>true</AllowMulticast>
-    </General>
-    <Internal>
-      <Watermarks>
-        <WhcHigh>500kB</WhcHigh>
-      </Watermarks>
-    </Internal>
-  </Domain>
-</CycloneDDS>
-```
-
----
-
-## 8. 启动顺序
-
-```bash
-# 终端 1: Factor Perception
-ros2 launch factor_perception factor_perception_launch.py
+# 终端 1: Factor Perception (使用 composable node)
+ros2 launch /home/yq/nav24r/factor_perception_auto.launch.py
 
 # 终端 2: Robot Localization (EKF)
 ros2 launch robot_localization ekf.launch.py
@@ -294,7 +257,8 @@ ros2 launch nav2_bringup navigation_launch.py \
     params_file:=/path/to/nav2_params.yaml
 
 # 终端 4: SLAM (可选，用于建图)
-ros2 launch slam_toolbox online_async_launch.py
+ros2 launch rtabmap_launch rtabmap.launch.py \
+    args:="-d /home/yq/rtabmap.db"
 ```
 
 ---
@@ -303,25 +267,24 @@ ros2 launch slam_toolbox online_async_launch.py
 
 | 问题 | 原因 | 解决方案 |
 |------|------|----------|
-| TF 树断开 | `publish_tf=True` | 设置为 `False`，使用 EKF |
-| 鬼影障碍物 | 深度噪点 | 启用 `depth_filter=True` |
+| TF 树断开 | `publish_tf=True` | 设置为 `false`，使用 EKF |
 | VIO 室内漂移 | 光线不足 | 增加 `ir_intensity` |
 | 高延迟 | Fast DDS 开销 | 使用 Cyclone DDS |
-| TF 时间戳错误 | 时钟漂移 | 在所有板上安装 Chrony |
+| TF 时间戳错误 | 时钟漂移 | 安装 Chrony |
 
 ---
 
 ## 10. 后续步骤
 
-1. [ ] 安装 Factor Perception SDK: `sudo apt install ros-humble-factor-perception` (或从源码编译)
-2. [ ] 使用上述参数创建启动文件
-3. [ ] 配置 Nav2 代价地图层
-4. [ ] 设置 robot_localization EKF
-5. [ ] 在 x86 上测试，然后为 RK3588 交叉编译
-6. [ ] 在目标硬件上部署 CPU 亲和性和 Chrony
+1. [x] 安装 Factor Perception SDK（已通过系统包安装至 `/opt/ros/jazzy/share/factor_perception/`）
+2. [x] 使用 `factor_perception_auto.launch.py` 启动
+3. [x] 配置 Nav2 代价地图层
+4. [x] 设置 robot_localization EKF
+5. [ ] 在目标硬件上部署并验证 CPU 亲和性（如需要）
+6. [ ] 长期运行稳定性测试
 
 ---
 
-*版本: v1.0-CN*
-*创建日期: 2025-05-25*
-*翻译自: factor_perception_nav2_guide.md*
+*版本: v2.0-Jazzy*
+*更新日期: 2026-07-17*
+*基于: Factor Perception SDK (Jul 17 update)*

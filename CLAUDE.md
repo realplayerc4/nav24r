@@ -241,28 +241,41 @@ if __name__ == '__main__':
 nav24r/
 ├── launch/                    # ROS 2 launch 文件（Python 格式）
 │   ├── nav24r_full.launch.py
-│   ├── nav2.launch.py
-│   └── factor_perception_isolated.launch.py
+│   ├── factor_perception_isolated.launch.py
+│   └── nav2.launch.py
 ├── config/                    # 配置文件
-│   ├── nav2_params.yaml       # Nav2 参数（YAML，2 空格缩进）
+│   ├── nav2_params.yaml
 │   ├── factor_perception_config.yaml
-│   ├── maps_config.json       # 地图配置（JSON）
-│   ├── *.rviz                 # RViz 配置文件
-│   └── rtabmap_*.ini          # RTAB-Map 配置
+│   ├── maps_config.json
+│   ├── cyclonedds.xml
+│   ├── rtabmap_light.rviz
+│   ├── mapping.rviz / mapping_3d.rviz
+│   ├── navigation.rviz
+│   ├── octomap.rviz / octomap_3d.rviz
+│   ├── map_viewer_3d.rviz
+│   └── rtabmap_config_doc.md
 ├── scripts/                   # 控制脚本
-│   ├── web_control_panel.py   # Web 控制面板（端口 8080）
-│   ├── start_factor.sh        # 智能启动脚本
-│   ├── diagnose.sh            # 诊断脚本
-│   └── factor_control_panel.py
+│   ├── factor_control_panel.py
+│   ├── start_factor.sh
+│   ├── start_rtabmap_light.sh
+│   ├── factor_control.sh
+│   ├── analyze_map_quality.py
+│   ├── export_octomap.py
+│   ├── mock_odom_publisher.py
+│   ├── mock_pointcloud_publisher.py
+│   ├── test_runner.sh
+│   └── test_phase*.sh / test_simulation.py
+├── docs/                      # 技术文档（多篇）
+├── factor_perception/         # Factor Perception SDK（第三方，不修改）
 ├── Calibrat/                  # IMU 校准工具
-│   ├── IMU/                   # IMU 数据
+│   ├── IMU/
 │   ├── raw2unCal.py
 │   ├── uncal2cal.py
 │   └── run_examples.py
-├── factor_perception/         # Factor Perception SDK（第三方，不修改）
-├── package.xml                # ROS 2 包配置（XML）
-├── setup.py                   # Python 包配置
-└── README.md                  # 项目文档
+├── package.xml
+├── setup.py
+├── README.md
+└── CHANGELOG.md
 ```
 
 ---
@@ -283,7 +296,6 @@ nav24r/
 - **配置目录：** `/home/yq/nav24r/config`
 - **地图目录：** `~/rtabmap_maps/`
 - **默认数据库：** `~/rtabmap.db`
-- **日志文件：** `/tmp/factor_web_control_panel.log`
 
 ---
 
@@ -334,18 +346,7 @@ pip3 install -r requirements.txt  # （如果存在）
 ros2 launch nav24r nav24r_full.launch.py
 ```
 
-### 诊断
-
-```bash
-~/nav24r/scripts/diagnose.sh
-```
-
-### Web 控制面板
-
-```bash
-python3 ~/nav24r/scripts/web_control_panel.py
-# 访问 http://localhost:8080
-```
+### 控制面板
 
 ---
 
@@ -355,7 +356,7 @@ python3 ~/nav24r/scripts/web_control_panel.py
 
 - **launch 文件**：添加/修改参数、节点、包含文件
 - **config 文件**：调整参数（Nav2、RTAB-Map、RViz）
-- **scripts/**：修改控制脚本（启动、诊断、Web 面板）
+- **scripts/**：修改控制脚本（启动、建图、导航、分析）
 - **README.md**：更新文档和快速启动指南
 
 ### ⚠️ 谨慎修改
@@ -395,7 +396,6 @@ ros2 run rqt_console rqt_console
 ### 日志位置
 
 - **ROS 2 日志：** `~/ros2_ws/log/`
-- **Web 控制面板：** `/tmp/factor_web_control_panel.log`
 - **控制台输出：** 使用 `self.get_logger().info()` 而非 `print()`
 
 ---
@@ -410,7 +410,6 @@ ros2 run rqt_console rqt_console
 - [ ] TF 树完整（`ros2 run tf2_tools view_frames`）
 - [ ] Nav2 能接收目标点（`ros2 action send_goal`）
 - [ ] RTAB-Map 能生成地图
-- [ ] Web 控制面板可访问（http://localhost:8080）
 
 ---
 

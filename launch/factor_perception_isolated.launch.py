@@ -20,36 +20,53 @@ def generate_launch_description():
     # ============ 参数定义 ============
 
     # Factor Perception 参数
-    camera_model_arg = DeclareLaunchArgument('camera_model', default_value='OAK-D-PRO-W')
-    mxid_or_name_arg = DeclareLaunchArgument('mxid_or_name', default_value='')
-    key_arg = DeclareLaunchArgument('key', default_value=EnvironmentVariable('FACTOR_PERCEPTION_KEY', default_value=''))
-    oak_tf_prefix_arg = DeclareLaunchArgument('oak_tf_prefix', default_value='oak')
-    base_frame_id_arg = DeclareLaunchArgument('base_frame_id', default_value='base_link')
-    odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='odom')
-    cam_pos_x_arg = DeclareLaunchArgument('cam_pos_x', default_value='0.0')
-    cam_pos_y_arg = DeclareLaunchArgument('cam_pos_y', default_value='0.0')
-    cam_pos_z_arg = DeclareLaunchArgument('cam_pos_z', default_value='1.0')  # 相机高度1m（v2.0隔离版安装位置更高）
-    cam_roll_arg = DeclareLaunchArgument('cam_roll', default_value='0.0')
-    cam_pitch_arg = DeclareLaunchArgument('cam_pitch', default_value='0.0')
-    cam_yaw_arg = DeclareLaunchArgument('cam_yaw', default_value='0.0')
-    publish_tf_arg = DeclareLaunchArgument('publish_tf', default_value='true')
-    depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='true')
-    ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.4')
-    min_feat_depth_arg = DeclareLaunchArgument('min_feat_depth', default_value='0.0')
-
-    # 使用 PathJoinSubstitution 替代硬编码路径
+    camera_model_arg = DeclareLaunchArgument('camera_model', default_value='OAK-D-PRO-W',
+        description='Factor Perception camera model (OAK-D-PRO-W, OAK-D-LR, OAK-D-SR)')
+    mxid_or_name_arg = DeclareLaunchArgument('mxid_or_name', default_value='',
+        description='Camera MX ID or device name (empty = first available)')
+    key_arg = DeclareLaunchArgument('key', default_value=EnvironmentVariable('FACTOR_PERCEPTION_KEY', default_value=''),
+        description='Factor Perception SDK license key')
+    oak_tf_prefix_arg = DeclareLaunchArgument('oak_tf_prefix', default_value='oak',
+        description='TF prefix for camera frames')
+    base_frame_id_arg = DeclareLaunchArgument('base_frame_id', default_value='base_link',
+        description='Robot base frame ID')
+    odom_frame_id_arg = DeclareLaunchArgument('odom_frame_id', default_value='odom',
+        description='Odometry frame ID')
+    cam_pos_x_arg = DeclareLaunchArgument('cam_pos_x', default_value='0.0',
+        description='Camera X offset from base (meters)')
+    cam_pos_y_arg = DeclareLaunchArgument('cam_pos_y', default_value='0.0',
+        description='Camera Y offset from base (meters)')
+    cam_pos_z_arg = DeclareLaunchArgument('cam_pos_z', default_value='0.85',
+        description='Camera height above base (meters)')
+    cam_roll_arg = DeclareLaunchArgument('cam_roll', default_value='0.0',
+        description='Camera roll (radians)')
+    cam_pitch_arg = DeclareLaunchArgument('cam_pitch', default_value='0.0',
+        description='Camera pitch (radians)')
+    cam_yaw_arg = DeclareLaunchArgument('cam_yaw', default_value='0.0',
+        description='Camera yaw (radians)')
+    publish_tf_arg = DeclareLaunchArgument('publish_tf', default_value='true',
+        description='Publish camera TF transforms')
+    depth_filter_arg = DeclareLaunchArgument('depth_filter', default_value='false',
+        description='Enable depth image filtering')
+    ir_intensity_arg = DeclareLaunchArgument('ir_intensity', default_value='0.4',
+        description='IR illumination intensity (0.0-1.0)')
+    min_feat_depth_arg = DeclareLaunchArgument('min_feat_depth', default_value='0.0',
+        description='Minimum depth for feature extraction (meters)')
     config_path_arg = DeclareLaunchArgument('config_path',
         default_value=PathJoinSubstitution([
-            FindPackageShare('nav24r'),
-            'config', 'rtabmap_custom.ini'
-        ]))
-    database_path_arg = DeclareLaunchArgument('database_path', default_value=[EnvironmentVariable('HOME', default_value='/home/yq'), TextSubstitution(text='/rtabmap.db')])
-    localization_arg = DeclareLaunchArgument('localization', default_value='false')
-    rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='true')  # 统一默认值
-    continue_mapping_arg = DeclareLaunchArgument('continue_mapping', default_value='false')
+            FindPackageShare('factor_perception'), 'config', 'rtabmap.ini'
+        ]), description='Path to RTAB-Map configuration INI file')
+    database_path_arg = DeclareLaunchArgument('database_path',
+        default_value=[EnvironmentVariable('HOME', default_value='/home/yq'), TextSubstitution(text='/rtabmap.db')],
+        description='Path to RTAB-Map database file')
+    localization_arg = DeclareLaunchArgument('localization', default_value='false',
+        description='Localization-only mode (load existing map)')
+    rtabmap_viz_arg = DeclareLaunchArgument('rtabmap_viz', default_value='true',
+        description='Show RTAB-Map visualization window')
 
     # 设备检查参数
-    skip_device_check_arg = DeclareLaunchArgument('skip_device_check', default_value='false')
+    skip_device_check_arg = DeclareLaunchArgument('skip_device_check', default_value='false',
+        description='Skip pre-start hardware device presence check')
 
     # ============ Robot Description ============
 
@@ -141,41 +158,20 @@ def generate_launch_description():
         'sync_queue_size': 50,
         'config_path': LaunchConfiguration('config_path'),
         'database_path': LaunchConfiguration('database_path'),
-        'Grid/3D': 'true',
         'RGBD/ProximityBySpace': 'true',
         'RGBD/ProximityByTime': 'true',
     }
 
     # SLAM 建图 - 新建地图
-    rtabmap_slam_new = ComposableNode(
+    rtabmap_slam = ComposableNode(
         package='rtabmap_slam',
         plugin='rtabmap_slam::CoreWrapper',
         name='rtabmap',
         namespace='factor_perception',
-        condition=IfCondition(PythonExpression([
-            "'", LaunchConfiguration('localization'), "' == 'false' and '",
-            LaunchConfiguration('continue_mapping'), "' == 'false'"
-        ])),
+        condition=UnlessCondition(LaunchConfiguration('localization')),
         parameters=[slam_params, {
             'Mem/IncrementalMemory': 'true',
             'Mem/InitWMWithAllNodes': 'false',
-        }],
-        extra_arguments=[{'use_intra_process_comms': True}],
-    )
-
-    # SLAM 建图 - 续建地图
-    rtabmap_slam_continue = ComposableNode(
-        package='rtabmap_slam',
-        plugin='rtabmap_slam::CoreWrapper',
-        name='rtabmap',
-        namespace='factor_perception',
-        condition=IfCondition(PythonExpression([
-            "'", LaunchConfiguration('localization'), "' == 'false' and '",
-            LaunchConfiguration('continue_mapping'), "' != 'false'"
-        ])),
-        parameters=[slam_params, {
-            'Mem/IncrementalMemory': 'true',
-            'Mem/InitWMWithAllNodes': 'true',
         }],
         extra_arguments=[{'use_intra_process_comms': True}],
     )
@@ -202,7 +198,7 @@ def generate_launch_description():
         executable='component_container_isolated',  # 隔离模式
         ros_arguments=['--log-level', 'info'],
         composable_node_descriptions=[
-            rtabmap_slam_new, rtabmap_slam_continue, rtabmap_localization
+            rtabmap_slam, rtabmap_localization
         ],
     )
 
@@ -277,7 +273,7 @@ def generate_launch_description():
         publish_tf_arg, depth_filter_arg,
         ir_intensity_arg, min_feat_depth_arg,
         config_path_arg, database_path_arg,
-        localization_arg, rtabmap_viz_arg, continue_mapping_arg,
+        localization_arg, rtabmap_viz_arg,
         skip_device_check_arg,
 
         # 节点

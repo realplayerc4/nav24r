@@ -35,9 +35,9 @@ maps:
 
 # 启动参数
 launch:
-  depth_filter: true
+  depth_filter: false
   ir_intensity: 0.4
-  cam_pos_z: 1.0
+  cam_pos_z: 0.85
   publish_tf: true
 
 # 路径配置

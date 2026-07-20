@@ -1,48 +1,56 @@
 #!/bin/bash
-# Factor Perception 启动脚本
-# 支持建图和定位模式
-
+# Factor Perception 启动脚本（改进版）
+# 支持建图/续建/定位模式，结构化日志
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "${SCRIPT_DIR}")"
+LOG_DIR="${LOG_DIR:-$HOME/.local/share/nav24r/logs}"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/start_factor_$(date +%Y%m%d_%H%M%S).log"
 
-# 默认参数
-MODE="mapping"  # mapping 或 localization
-DATABASE=""
+DEFAULT_DB="$HOME/rtabmap.db"
+MODE="mapping"
 RTABMAP_VIZ="true"
 
-# 颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
+
+log_info()  { echo -e "${GREEN}[INFO]${NC} $(date '+%H:%M:%S') $1" | tee -a "$LOG_FILE"; }
+log_warn()  { echo -e "${YELLOW}[WARN]${NC} $(date '+%H:%M:%S') $1" | tee -a "$LOG_FILE"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $(date '+%H:%M:%S') $1" | tee -a "$LOG_FILE"; }
+
+cleanup() {
+    local exit_code=$?
+    log_info "收到终止信号，正在清理..."
+    pkill -f "ros2 launch.*factor_perception" 2>/dev/null || true
+    log_info "清理完成，日志: $LOG_FILE"
+    exit $exit_code
+}
+trap cleanup SIGINT SIGTERM EXIT
 
 usage() {
     echo "用法: $0 [选项]"
     echo ""
     echo "选项:"
-    echo "  -m, --mode <mode>       运行模式: mapping (建图) 或 localization (定位)"
-    echo "  -d, --database <path>   地图数据库路径"
-    echo "  -v, --viz               启用 RTAB-Map 可视化 (默认启用)"
-    echo "  --no-viz                禁用 RTAB-Map 可视化"
-    echo "  -h, --help              显示帮助信息"
+    echo "  -m, --mode <mode>   运行模式: mapping (新建), continue (续建), localization (定位), reset (重置)"
+    echo "  -v, --viz           启用 RTAB-Map 可视化 (默认启用)"
+    echo "  --no-viz            禁用 RTAB-Map 可视化"
+    echo "  -h, --help          显示帮助信息"
     echo ""
     echo "示例:"
-    echo "  $0 -m mapping -d ~/rtabmap_maps/new_map.db"
-    echo "  $0 -m localization -d ~/rtabmap.db"
-    echo "  $0  # 默认建图模式，自动生成地图ID"
+    echo "  $0 -m mapping              # 新建地图 (默认数据库)"
+    echo "  $0 -m continue             # 续建地图 (默认数据库)"
+    echo "  $0 -m localization         # 定位模式 (默认数据库)"
+    echo "  $0 -m reset                # 重置地图 (删除数据库)"
 }
 
-# 解析参数
 while [[ $# -gt 0 ]]; do
     case $1 in
         -m|--mode)
             MODE="$2"
-            shift 2
-            ;;
-        -d|--database)
-            DATABASE="$2"
             shift 2
             ;;
         -v|--viz)
@@ -65,65 +73,64 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# 检查 ROS2 环境
 if [ -z "$ROS_DISTRO" ]; then
-    echo -e "${YELLOW}正在加载 ROS2 环境...${NC}"
+    log_info "正在加载 ROS2 环境..."
     source /opt/ros/jazzy/setup.bash
 fi
 
-# 检查相机连接
-echo -e "${YELLOW}检查相机连接...${NC}"
+log_info "检查相机连接..."
 if lsusb | grep -qi "Movidius"; then
-    echo -e "${GREEN}✓ OAK-D 相机已连接${NC}"
+    log_info "OAK-D 相机已连接"
 else
-    echo -e "${RED}✗ 未检测到 OAK-D 相机${NC}"
+    log_error "未检测到 OAK-D 相机"
     echo "请检查相机 USB 连接"
     exit 1
 fi
 
-# 设置数据库路径
-if [ -z "$DATABASE" ]; then
-    if [ "$MODE" = "mapping" ]; then
-        MAP_ID="map_$(date +%Y%m%d_%H%M)"
-        DATABASE="$HOME/rtabmap_maps/${MAP_ID}.db"
-        mkdir -p ~/rtabmap_maps
-        echo -e "${GREEN}自动生成地图ID: ${MAP_ID}${NC}"
-    else
-        DATABASE="$HOME/rtabmap.db"
-        echo -e "${YELLOW}使用默认地图: ${DATABASE}${NC}"
-    fi
-fi
-
-# 检查定位模式的地图是否存在
-if [ "$MODE" = "localization" ]; then
-    if [ ! -f "$DATABASE" ]; then
-        echo -e "${RED}✗ 地图文件不存在: ${DATABASE}${NC}"
-        exit 1
-    fi
-    SIZE=$(du -h "$DATABASE" | cut -f1)
-    echo -e "${GREEN}✓ 找到地图: ${DATABASE} (${SIZE})${NC}"
-fi
-
-# 设置参数
+DATABASE="$DEFAULT_DB"
 LOCALIZATION="false"
+MODE_DESC="新建地图"
+
 if [ "$MODE" = "localization" ]; then
     LOCALIZATION="true"
+    MODE_DESC="定位模式"
+elif [ "$MODE" = "continue" ]; then
+    LOCALIZATION="false"
+    MODE_DESC="续建地图"
+elif [ "$MODE" = "reset" ]; then
+    if [ -f "$DATABASE" ]; then
+        echo -e "${YELLOW}重置地图: 删除数据库 ${DATABASE}${NC}"
+        rm -f "$DATABASE"
+        echo -e "${GREEN}✓ 数据库已删除${NC}"
+    else
+        echo -e "${YELLOW}数据库不存在，无需重置: ${DATABASE}${NC}"
+    fi
+    exit 0
+elif [ "$MODE" != "mapping" ]; then
+    log_error "未知模式: $MODE（支持: mapping, continue, localization, reset）"
+    usage
+    exit 1
 fi
 
-echo ""
-echo "=========================================="
-echo "Factor Perception 启动配置"
-echo "=========================================="
-echo "模式:         $MODE"
-echo "数据库:       $DATABASE"
-echo "可视化:       $RTABMAP_VIZ"
-echo "定位模式:     $LOCALIZATION"
-echo "=========================================="
-echo ""
+if [ ! -f "$DATABASE" ] && [ "$MODE" != "mapping" ]; then
+    log_error "默认数据库不存在: ${DATABASE}"
+    echo "请先使用建图模式创建地图"
+    exit 1
+fi
 
-# 启动
-echo -e "${GREEN}正在启动...${NC}"
+if [ -f "$DATABASE" ]; then
+    SIZE=$(du -h "$DATABASE" | cut -f1)
+    log_info "数据库: ${DATABASE} (${SIZE})"
+fi
+
+log_info "启动配置: mode=${MODE_DESC}, db=${DATABASE}, viz=${RTABMAP_VIZ}, localization=${LOCALIZATION}"
+
+log_info "正在启动..."
 ros2 launch "${PROJECT_DIR}/factor_perception_auto.launch.py" \
     localization:=${LOCALIZATION} \
     rtabmap_viz:=${RTABMAP_VIZ} \
-    database_path:=${DATABASE}
+    database_path:=${DATABASE} &
+LAUNCH_PID=$!
+
+wait $LAUNCH_PID
+echo "完成"

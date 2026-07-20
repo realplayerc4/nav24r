@@ -6,6 +6,7 @@
 |------|------|------|
 | v2.1 | 2026-06-18 | 基于Factor Perception SDK默认配置 + 3D避障 |
 | v2.2 | 2026-06-18 | 添加ROS2工程分析、设备检测、控制面板更新 |
+| v3.0 | 2026-07-17 | 移除3D避障自定义，采用SDK默认 rtabmap.ini；相机高度更新为 0.85m；关闭 depth_filter；单 rtabmap_slam 节点 |
 
 ---
 
@@ -41,7 +42,7 @@
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| 相机高度 | 1.0m | OAK-D Pro 安装高度 |
+| 相机高度 | 0.85m | OAK-D Pro 安装高度 |
 | 机器人最高点 | ≤1.4m | 机器人本体最高高度 |
 | 机器人半径 | 0.5m | 用于 footprint 计算 |
 
@@ -79,9 +80,10 @@
 
 | 参数 | SDK默认 | 修改值 | 说明 |
 |------|---------|--------|------|
-| `Grid\3D` | false | **true** | 启用3D点云地图（3D避障需要） |
-| `Grid\MaxObstacleHeight` | 1.0m | **1.5m** | 适配机器人最高点1.4m |
-| `GridGlobal\FootprintRadius` | 0.0 | **0.5m** | 设置机器人轮廓半径 |
+| `cam_pos_z` | 0.0m | **0.85m** | 相机实际安装高度 |
+| `depth_filter` | false | **false** | 保持默认关闭 |
+| `ir_intensity` | 0.0 | **0.4** | 改善室内 VIO 稳定性 |
+| `publish_tf` | true | **true** | 保持默认（单传感器导航） |
 
 ---
 
@@ -91,7 +93,7 @@ RTAB-Map 参数与 Nav2 配置 (`config/nav2_params.yaml`) 保持一致：
 
 | 参数 | RTAB-Map | Nav2 | 说明 |
 |------|----------|------|------|
-| max_obstacle_height | 1.5m | 1.5m | ✅ 一致 |
+| max_obstacle_height | 1.0m (SDK默认) | 1.5m | Nav2 costmap 限制 |
 | min_obstacle_height | - | 0.05m | Nav2 obstacle_layer |
 | min_z / max_z | - | 0.05m / 1.5m | Nav2 collision_monitor |
 
@@ -99,7 +101,7 @@ RTAB-Map 参数与 Nav2 配置 (`config/nav2_params.yaml`) 保持一致：
 
 ## 配置文件位置
 
-- RTAB-Map: `/home/yq/nav24r/config/rtabmap_custom.ini`
+- RTAB-Map: SDK 自带 `/opt/ros/jazzy/share/factor_perception/config/rtabmap.ini`
 - Nav2: `/home/yq/nav24r/config/nav2_params.yaml`
 
 ---
@@ -108,8 +110,8 @@ RTAB-Map 参数与 Nav2 配置 (`config/nav2_params.yaml`) 保持一致：
 
 | 话题 | 说明 |
 |------|------|
-| `/factor_perception/cloud_obstacles` | 3D障碍物点云 |
-| `/factor_perception/map` | 2D栅格地图 |
+| `/factor_perception/rtabmap/cloud_map` | 3D 地图点云 |
+| `/factor_perception/rtabmap/octomap` | 3D Octomap |
 
 ---
 
@@ -144,7 +146,7 @@ cd /home/yq/nav24r
 ```bash
 # 1. 启动 SLAM (无可视化)
 ros2 launch factor_perception factor_perception_auto.launch.py \
-    cam_pos_z:=1.0 \
+    cam_pos_z:=0.85 \
     rtabmap_viz:=false
 
 # 2. 启动轻量化 RViz2

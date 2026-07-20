@@ -33,6 +33,7 @@ setup(
             'mock_odom_publisher = scripts.mock_odom_publisher:main',
             'mock_pointcloud_publisher = scripts.mock_pointcloud_publisher:main',
             'test_simulation = scripts.test_simulation:main',
+            'odom_covariance_fix = scripts.odom_covariance_fix:main',
         ],
     },
 )

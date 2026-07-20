@@ -76,7 +76,7 @@ TF 发布规范:
 | 参数 | 允许值 | 推荐值 | 原因 |
 |------|--------|--------|------|
 | `publish_tf` | `[False]` | `False` | 防止与EKF冲突 |
-| `depth_filter` | `[True, False]` | `True` | 人形机器人需过滤噪点 |
+| `depth_filter` | `[True, False]` | `False` | 默认关闭；仅在需要时开启 |
 | `ir_intensity` | `[0.0, 1.0]` | `0.4` | 室内VIO稳定性 |
 | `confidence_threshold` | `[0, 255]` | `200` | 深度置信度 |
 | `vio_frequency` | `[10.0, 60.0]` | `30.0` | VIO频率 |

@@ -1,7 +1,13 @@
 {
   "maps_dir": "~/rtabmap_maps",
-  "last_map": "map_2026_06_02_03_52",
+  "last_map": "map_20260715_1509",
   "maps": {
+    "map_20260715_1509": {
+      "created": "2026-07-15 15:23:00",
+      "path": "/home/yq/rtabmap_maps/map_20260715_1509.db",
+      "description": "",
+      "mode": "新建"
+    },
     "map_20260602_1047": {
       "created": "2026-06-02 10:47:07",
       "path": "~/rtabmap_maps/map_20260602_1047.db",
