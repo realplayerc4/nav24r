@@ -559,6 +559,12 @@ class FactorControlPanel:
         if not os.path.exists(db_path):
             messagebox.showinfo("提示", f"数据库不存在:\n{db_path}\n\n无需重置")
             return
+        # 地图保护开关
+        if not self.allow_overwrite_var.get():
+            messagebox.showwarning("地图保护",
+                f"地图保护已开启，无法重置数据库:\n{db_path}\n\n"
+                f"如需重置，请先勾选「允许覆盖现有地图」")
+            return
         if not messagebox.askyesno("确认重置", f"将删除数据库:\n{db_path}\n\n此操作不可恢复，是否继续？"):
             return
         try:
@@ -795,6 +801,12 @@ class FactorControlPanel:
         db_path = self._get_default_db()
         if not os.path.exists(db_path):
             messagebox.showinfo("提示", f"数据库不存在:\n{db_path}\n\n无需清理")
+            return
+        # 地图保护开关
+        if not self.allow_overwrite_var.get():
+            messagebox.showwarning("地图保护",
+                f"地图保护已开启，无法清理数据库:\n{db_path}\n\n"
+                f"如需清理，请先勾选「允许覆盖现有地图」")
             return
 
         # 先做 dry-run 分析
