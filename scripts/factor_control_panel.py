@@ -421,7 +421,7 @@ class FactorControlPanel:
             config_path = os.path.join(config_dir, 'rtabmap.ini')
             launch_file = os.path.join(project_root, "factor_perception_auto.launch.py")
 
-            cmd = ['bash', '-c', f'source {ros_setup} && ros2 launch {launch_file} '
+            cmd = ['bash', '-c', f'export QT_QPA_PLATFORM=xcb && source {ros_setup} && ros2 launch {launch_file} '
                    f'localization:=false rtabmap_viz:=true database_path:={db_path} '
                    f'key:={camera_key} config_path:={config_path}']
             subprocess.Popen(cmd, shell=False)
@@ -475,7 +475,7 @@ class FactorControlPanel:
             config_dir = self.app_config['paths']['config_dir']
             config_path = os.path.join(config_dir, 'rtabmap.ini')
             launch_file = os.path.join(project_root, "factor_perception_auto.launch.py")
-            cmd = ['bash', '-c', f'source {ros_setup} && ros2 launch {launch_file} '
+            cmd = ['bash', '-c', f'export QT_QPA_PLATFORM=xcb && source {ros_setup} && ros2 launch {launch_file} '
                    f'localization:=true rtabmap_viz:=true database_path:={db_path} '
                    f'key:={camera_key} config_path:={config_path}']
             subprocess.Popen(cmd, shell=False)
@@ -504,7 +504,7 @@ class FactorControlPanel:
             config_path = os.path.join(config_dir, 'rtabmap.ini')
             nav2_params = os.path.join(config_dir, 'nav2_params.yaml')
             launch_file = os.path.join(project_root, "launch", "nav24r_full.launch.py")
-            cmd = ['bash', '-c', f'source {ros_setup} && ros2 launch {launch_file} '
+            cmd = ['bash', '-c', f'export QT_QPA_PLATFORM=xcb && source {ros_setup} && ros2 launch {launch_file} '
                    f'database_path:={db_path} key:={camera_key} '
                    f'config_path:={config_path} nav2_params_file:={nav2_params}']
             subprocess.Popen(cmd, shell=False)
@@ -1109,46 +1109,24 @@ done
 
     def _verify_usb_speed_after_launch(self):
         """启动后验证实际 USB 速度（驱动已打开设备后）。
-        优先用 depthai 尝试打开设备验证；depthai 不可用时回退到 usb_ok 值。"""
+        仅更新状态栏显示，不弹窗不中断。"""
         try:
             import depthai as dai
             device_info = dai.DeviceInfo()
-            # 如果能获取到设备信息，说明驱动已成功打开设备
             self.usb_ok = True
             self.usb_speed_var.set("USB 3.0+ (已验证)")
             if hasattr(self, 'usb_speed_label'):
                 self.usb_speed_label.config(fg='#00ff88')
             logger.info("USB 速度验证通过: depthai 设备可打开")
-            return True
         except ImportError:
-            # depthai 未安装（开发环境），回退到 usb_ok 值
-            logger.debug("depthai 不可用，使用 usb_ok 值验证")
-            if hasattr(self, 'usb_ok') and not self.usb_ok:
-                self._show_usb_error_and_stop()
-                return False
-            return True
+            logger.debug("depthai 不可用，跳过 USB 验证")
         except Exception as e:
-            # 无法打开设备，可能是 USB 2.0 或驱动问题
             self.usb_ok = False
             self.usb_speed_var.set("USB 连接失败")
             if hasattr(self, 'usb_speed_label'):
                 self.usb_speed_label.config(fg='#e63946')
             logger.warning(f"USB 速度验证失败: {e}")
-            self._show_usb_error_and_stop()
-            return False
-
-    def _show_usb_error_and_stop(self):
-        messagebox.showerror("USB 连接失败",
-            "🚫 OAK-D 相机无法正常连接！\n\n"
-            "可能原因:\n"
-            "  • USB 2.0 连接（带宽不足）\n"
-            "  • USB 线缆/接口故障\n"
-            "  • 相机被其他程序占用\n\n"
-            "请检查:\n"
-            "1. 确认使用 USB 3.0 数据线和接口\n"
-            "2. 确认没有其他程序在使用相机\n"
-            "3. 尝试重启相机或更换 USB 端口")
-        self.stop_all()
+            # 不弹窗，不停止，状态栏已显示警告
 
     # ==================== 测试报告 ====================
 
