@@ -186,6 +186,16 @@ class FactorControlPanel:
         self.db_size_var = tk.StringVar(value="计算中...")
         tk.Label(db_row, textvariable=self.db_size_var, font=('Arial', 9, 'bold'), fg='#ffaa00', bg='#2b2b2b').pack(side=tk.RIGHT)
 
+        # 地图保护开关：默认关闭，关闭时不允许覆盖已有数据库
+        self.allow_overwrite_var = tk.BooleanVar(value=False)
+        self.chk_overwrite = tk.Checkbutton(db_info_frame,
+            text="允许覆盖现有地图（关闭时保护已有数据库）",
+            variable=self.allow_overwrite_var,
+            command=self._on_overwrite_toggle,
+            bg='#2b2b2b', fg='#ffaa00',
+            selectcolor='#2b2b2b', activebackground='#2b2b2b')
+        self.chk_overwrite.pack(anchor=tk.W, pady=2)
+
         btn_frame = tk.LabelFrame(self.root, text="功能", font=('Arial', 11), padx=10, pady=10)
         btn_frame.pack(fill=tk.X, padx=20, pady=5)
 
@@ -364,8 +374,15 @@ class FactorControlPanel:
             return
         if not self.check_device_before_launch():
             return
+        db_path = self._get_default_db()
+        # 地图保护开关：关闭时禁止覆盖已有数据库
+        if os.path.exists(db_path) and not self.allow_overwrite_var.get():
+            messagebox.showwarning("地图保护",
+                f"检测到已有数据库:\n{db_path}\n\n"
+                f"为防误操作，新建建图默认禁止覆盖。\n"
+                f"如需覆盖，请勾选下方的「允许覆盖现有地图」后再试。")
+            return
         try:
-            db_path = self._get_default_db()
             # 地图保护：如果数据库存在，先检查完整性
             if os.path.exists(db_path):
                 ok, msg = self._check_db_integrity(db_path)
@@ -436,7 +453,8 @@ class FactorControlPanel:
 
     def update_db_size(self):
         db_path = self._get_default_db()
-        if os.path.exists(db_path):
+        db_exists = os.path.exists(db_path)
+        if db_exists:
             size_bytes = os.path.getsize(db_path)
             if size_bytes < 1024 * 1024:
                 size_str = f"{size_bytes / 1024:.1f} KB"
@@ -445,14 +463,30 @@ class FactorControlPanel:
             else:
                 size_str = f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
             self.db_size_var.set(f"大小: {size_str}")
-            # 数据库有内容时，新建建图按钮显示橙色警告
             if hasattr(self, 'btn_new_mapping'):
                 self.btn_new_mapping.config(bg='#e67e22', text='🗺️ 新建建图 (覆盖)')
         else:
             self.db_size_var.set("大小: 不存在")
             if hasattr(self, 'btn_new_mapping'):
                 self.btn_new_mapping.config(bg='#2980b9', text='🗺️ 新建建图')
+        # 地图保护：数据库存在且未勾选"允许覆盖"时，禁用按钮
+        if hasattr(self, 'btn_new_mapping'):
+            if db_exists and not self.allow_overwrite_var.get():
+                self.btn_new_mapping.config(state=tk.DISABLED)
+            else:
+                self.btn_new_mapping.config(state=tk.NORMAL)
         self.root.after(2000, self.update_db_size)
+
+    def _on_overwrite_toggle(self):
+        """地图保护开关切换回调"""
+        if self.allow_overwrite_var.get():
+            logger.info("地图保护已关闭：允许覆盖现有数据库")
+            self.status_var.set("⚠️ 地图保护已关闭，建图将覆盖已有数据")
+        else:
+            logger.info("地图保护已开启：禁止覆盖现有数据库")
+            self.status_var.set("状态: 地图保护已开启")
+        # 立即刷新按钮状态
+        self.update_db_size()
 
     def start_navigation(self):
         if self.is_ros_running():

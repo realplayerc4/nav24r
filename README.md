@@ -6,6 +6,8 @@
 
 基于 ROS2 Jazzy 的人形机器人自主导航系统，集成 Factor Perception SDK、RTAB-Map SLAM 和 Nav2 导航栈。
 
+**版本**: v2.2.0 | **相机**: OAK-D Pro W (0.85m 安装高度) | **障碍物高度过滤**: 0.2m ~ 1.4m
+
 ---
 
 ## 🎯 项目特性
@@ -87,13 +89,15 @@ python3 scripts/factor_control_panel.py
 
 | 功能 | 说明 |
 |------|------|
-| 🗺️ 开始建图 | 点击开始建图（默认数据库 ~/rtabmap.db） |
-| 🧭 开始导航 | 点击开始导航（默认数据库） |
-| 🚀 完整导航 | Factor Perception + RTAB-Map + Nav2 全内容 |
-| 📷 设备状态 | OAK-D 连接状态实时监控（每3秒） |
+| 🗺️ 新建建图 | 清空数据库后重新建图（需二次确认） |
+| 🔄 续建 | 加载已有数据库继续建图 |
+| 🧭 开始定位 | 加载已有地图进入定位模式（localization） |
+| 🚀 完整导航 | Factor Perception + RTAB-Map + Nav2 全栈 |
+| 📷 设备状态 | OAK-D 连接/USB速度实时监控 |
 | 📊 地图质量 | 地图质量分析报告 |
+| 🧹 清理地面误判 | 分析并清理地毯等弱纹理地面的误判障碍物 |
 | 🗺️ 导出Octomap | 启动 Database Viewer 导出 |
-| 📁 数据库查看器 | 直接打开 rtabmap-databaseViewer |
+| 📁 数据库 | 打开 rtabmap-databaseViewer |
 
 > **替代入口（无 GUI 环境）**: `python3 scripts/factor_control_panel.py`（同一入口，跨平台兼容）
 
@@ -159,10 +163,12 @@ nav24r/
 │   ├── factor_control.sh                  # Shell 快捷启动
 │   ├── analyze_map_quality.py             # 地图质量分析
 │   ├── export_octomap.py                  # Octomap 导出
+│   ├── clean_ground_false_positives.py    # 地面误判清理工具
+│   ├── odom_covariance_fix.py             # 里程计协方差修复
+│   ├── ply_to_pointcloud.py               # PLY点云转ROS2 PointCloud2
 │   ├── mock_odom_publisher.py             # 仿真里程计
 │   ├── mock_pointcloud_publisher.py       # 仿真点云
-│   ├── test_runner.sh                     # 测试运行器
-│   └── test_phase*.sh / test_simulation.py # 分阶段测试脚本
+│   └── test_runner.sh / test_simulation.py # 测试脚本
 │
 ├── docs/                                   # 技术文档
 │   ├── ros2_engineering_analysis.md       # ROS2 工程分析
@@ -235,7 +241,7 @@ nav24r/
    
    # 或使用控制面板
    python3 scripts/factor_control_panel.py
-   # 选择 "定位模式" → "启动导航"
+   # 选择 "开始定位" → 或 "完整导航"
    ```
 
 3. **发送目标**
@@ -243,6 +249,15 @@ nav24r/
    # RViz2 中点击 "2D Pose Estimate" 设置起点
    # 点击 "Nav2 Goal" 设置目标点
    ```
+
+### 地图保护
+
+- **数据库路径**: `~/rtabmap.db`（固定路径，所有模式共用）
+- **保护机制**: 点击"新建建图"时，如果数据库已存在且有效，必须通过弹窗确认才能覆盖
+- **按钮提示**: 数据库存在时按钮变为橙色并显示"🗺️ 新建建图 (覆盖)"
+- **清理工具**: 控制面板 → "🧹 清理地面误判"（备份后删除，可恢复）
+
+> ⚠️ **注意**: "续建"和"开始定位"不会删除数据库。只有"新建建图"才会覆盖。
 
 ---
 
@@ -258,8 +273,8 @@ nav24r/
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| `max_obstacle_height` | 1.5m | 与 RTAB-Map 一致 |
-| `min_obstacle_height` | 0.05m | 地面忽略高度 |
+| `max_obstacle_height` | 1.4m | 高于 1.4m 不视为障碍物（相机有效范围） |
+| `min_obstacle_height` | 0.2m | 低于 0.2m 不视为障碍物（地面/门槛） |
 | `robot_radius` | 0.5m | 机器人半径 |
 
 ---
@@ -289,27 +304,38 @@ nav24r/
 
 ### 已解决的问题
 
-#### 1. 设备崩溃问题 ✅
-- **问题**: OAK-D 未连接时系统崩溃
-- **解决**: 启动前设备检测，自动重启机制
+#### 1. 地面误判 ✅
+- **问题**: 地毯等弱纹理地面被检测为障碍物
+- **解决**: NormalK=60 大邻域平滑法线 + MaxGroundHeight=0.15 + depth_filter=true
 
-#### 2. GPU 内存崩溃 ✅
-- **问题**: RViz 显示导致 GPU 崩溃
-- **解决**: 轻量化 RViz 配置，禁用图像流
+#### 2. rtabmap_viz 崩溃 ✅
+- **问题**: Wayland 下 Qt 不兼容，rtabmap_viz 40秒后崩溃
+- **解决**: 改用 Node 直接启动 + QT_QPA_PLATFORM=xcb
 
-#### 3. 组件故障传播 ✅
-- **问题**: 单个组件崩溃影响整个系统
-- **解决**: 使用 `component_container_mt` 单容器多线程架构，平衡性能与稳定性
+#### 3. 数据库表名不匹配 ✅
+- **问题**: 控制面板检查旧版表名，v0.22+ 数据库报错
+- **解决**: 表名更新为 Node/Link/Word/Data
+
+#### 4. USB 验证弹窗 ✅
+- **问题**: USB 速度验证失败时弹窗并停止所有进程
+- **解决**: 仅状态栏显示警告，不中断运行
+
+### 地图保护机制
+
+| 保护层 | 实现 |
+|--------|------|
+| 按钮颜色 | 数据库存在时按钮变橙色 + "(覆盖)" 文字 |
+| 确认弹窗 | 点击后需确认"是否覆盖现有数据" |
+| 备份清理 | "🧹 清理地面误判"自动备份为 .backup 文件 |
 
 ### 架构改进
 
-| 特性 | 旧版本 | 当前版本 |
-|------|--------|----------|
-| 容器类型 | 单节点进程 | `component_container_mt`（多线程） |
-| 生命周期 | 无 | 标准 composable node |
-| 设备检查 | 无 | 自动检测 |
-| 错误恢复 | 无 | 自动重启 |
-| IPC 通信 | 进程间 | 进程内 intra-process |
+| 特性 | 说明 |
+|------|------|
+| 容器类型 | `component_container_mt`（多线程） |
+| 设备检查 | 自动检测 OAK-D 连接和 USB 速度 |
+| 错误恢复 | rtabmap_viz 独立进程，崩溃不影响建图 |
+| 地面过滤 | 法线分割 + 高度过滤 + 光线追踪三层过滤 |
 
 ---
 
@@ -351,6 +377,23 @@ nav24r/
 ---
 
 ## 📝 版本历史
+
+### [v2.2.0] - 2026-07-20
+- 障碍物高度过滤 0.2m ~ 1.4m（RTAB-Map + Nav2 统一）
+- 地面误判修复：NormalK=60, MaxGroundHeight=0.15, MaxGroundAngle=25°
+- IR 投影仪强度提升 (0.4→0.8)，depth_filter 开启
+- 立体匹配优化（TextureThreshold, UniquenessRatio, Speckle）
+- 数据库保护：按钮颜色警告 + 确认弹窗
+- Wayland 兼容：rtabmap_viz 改用 Node 启动 + QT_QPA_PLATFORM=xcb
+- 移除 USB 验证弹窗（仅状态栏显示）
+- 新增 navigation_clean.rviz（导航干净视图）
+- 新增 clean_ground_false_positives.py（地面误判清理工具）
+- 按钮文案修正：开始导航 → 开始定位
+
+### [v2.1.0] - 2026-07-17
+- SDK 更新与配置简化
+- 单 rtabmap_slam 节点架构
+- 相机高度更新为 0.85m
 
 ### [v2.0.0] - 2026-06-19
 - 系统架构优化（容器隔离、生命周期管理）
