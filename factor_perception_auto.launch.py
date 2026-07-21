@@ -140,13 +140,17 @@ def generate_launch_description():
         ],
     )
 
-    rtabmap_viz = IncludeLaunchDescription(
-        PathJoinSubstitution([
-            FindPackageShare('factor_perception'),
-            'launch',
-            'rtabmap_viz_launch.py'
-        ]),
-        launch_arguments={'base_frame_id': LaunchConfiguration('base_frame_id')}.items(),
+    rtabmap_viz = Node(
+        executable='rtabmap_viz',
+        package='rtabmap_viz',
+        namespace='factor_perception',
+        parameters=[{
+            'subscribe_rgbd': True,
+            'frame_id': LaunchConfiguration('base_frame_id'),
+            'max_odom_update_rate': 200.0,
+            'sync_queue_size': 50,
+        }],
+        ros_arguments=['--log-level', 'warn'],
         condition=IfCondition(LaunchConfiguration('rtabmap_viz')),
     )
 

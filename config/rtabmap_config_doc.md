@@ -7,6 +7,7 @@
 | v2.1 | 2026-06-18 | 基于Factor Perception SDK默认配置 + 3D避障 |
 | v2.2 | 2026-06-18 | 添加ROS2工程分析、设备检测、控制面板更新 |
 | v3.0 | 2026-07-17 | 移除3D避障自定义，采用SDK默认 rtabmap.ini；相机高度更新为 0.85m；关闭 depth_filter；单 rtabmap_slam 节点 |
+| v3.1 | 2026-07-20 | 添加 RGBD/ProximityBySpace 和 RGBD/ProximityByTime 参数（修复续建地图关联问题）；更新文档匹配 SDK v1.5.1 |
 
 ---
 
@@ -84,6 +85,12 @@
 | `depth_filter` | false | **false** | 保持默认关闭 |
 | `ir_intensity` | 0.0 | **0.4** | 改善室内 VIO 稳定性 |
 | `publish_tf` | true | **true** | 保持默认（单传感器导航） |
+| `RGBD/ProximityBySpace` | false | **true** | 空间 proximity 检测（续建地图必需） |
+| `RGBD/ProximityByTime` | false | **true** | 时间 proximity 检测（续建地图必需） |
+| `Mem/IncrementalMemory` | true | **true** | 增量记忆（新建+续建） |
+| `Mem/InitWMWithAllNodes` | false | **false**(建图) / **true**(定位) | 是否加载所有历史节点到工作内存 |
+| `RGBD/ProximityBySpace` | false | **true** | 空间 proximity 检测（续建地图必需） |
+| `RGBD/ProximityByTime` | false | **true** | 时间 proximity 检测（续建地图必需） |
 
 ---
 
