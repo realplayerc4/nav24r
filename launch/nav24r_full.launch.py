@@ -71,7 +71,7 @@ def generate_launch_description():
         ]), description='Path to Nav2 parameter YAML file')
     map_subscribe_transient_local_arg = DeclareLaunchArgument('map_subscribe_transient_local',
         default_value='true', description='Subscribe to map with TRANSIENT_LOCAL durability')
-    use_composition_arg = DeclareLaunchArgument('use_composition', default_value='true',
+    use_composition_arg = DeclareLaunchArgument('use_composition', default_value='True',
         description='Use composed bringup via lifecycle manager')
     use_respawn_arg = DeclareLaunchArgument('use_respawn', default_value='false',
         description='Respawn crashed Nav2 nodes')

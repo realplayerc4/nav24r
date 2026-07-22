@@ -539,7 +539,7 @@ class FactorControlPanel:
             nav2_params = os.path.join(config_dir, 'nav2_params.yaml')
             launch_file = os.path.join(project_root, "launch", "nav24r_full.launch.py")
             cmd = ['bash', '-c', f'export QT_QPA_PLATFORM=xcb && source {ros_setup} && ros2 launch {launch_file} '
-                   f'database_path:={db_path} key:={camera_key} '
+                   f'database_path:={db_path} key:={camera_key} localization:=true '
                    f'config_path:={config_path} nav2_params_file:={nav2_params}']
             subprocess.Popen(cmd, shell=False)
             self.set_ros_running(True, "完整导航")
