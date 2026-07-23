@@ -6,7 +6,7 @@ package_name = 'nav24r'
 
 setup(
     name=package_name,
-    version='2.0.0',
+    version='2.3.0',
     packages=find_packages(exclude=['test']),
     data_files=[
         # ament index 注册
@@ -32,6 +32,8 @@ setup(
         'console_scripts': [
             'mock_odom_publisher = scripts.mock_odom_publisher:main',
             'mock_pointcloud_publisher = scripts.mock_pointcloud_publisher:main',
+            'mock_robot = scripts.mock_robot:main',
+            'generate_test_map = scripts.generate_test_map:main',
             'test_simulation = scripts.test_simulation:main',
             'odom_covariance_fix = scripts.odom_covariance_fix:main',
         ],
