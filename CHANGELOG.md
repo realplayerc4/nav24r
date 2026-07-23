@@ -1,5 +1,26 @@
 # 变更日志
 
+## [v2.3.0] - 2026-07-22 - Nav2 修复 + 地图保护 + 清理工具
+
+### 🐛 Bug 修复
+- ✅ Nav2 composition 模式：nav2_container 依赖修复（nav2_bringup 自带 lifecycle manager）
+- ✅ Localization 模式：use_composition 布尔量处理修复（False 时走非 composition 路径）
+
+### 🛡️ 地图保护增强
+- ✅ 新增地图保护开关（默认关闭）：关闭时禁止覆盖已有数据库
+- ✅ 重置地图按钮受保护开关约束
+- ✅ 清理地面误判工具受保护开关约束
+
+### 🛠️ 新增工具
+- ✅ `cleanup_rtabmap.py`：交互式 RTAB-Map 节点清理工具（列表/缩略图/多选删除）
+- ✅ `odom_covariance_fix.py`：里程计协方差修复节点（RTAB-Map 需要有效 covariance）
+- ✅ `ply_to_pointcloud.py`：PLY 点云转 ROS2 PointCloud2 话题
+
+### 📝 其他
+- ✅ pre-commit hook 配置
+
+---
+
 ## [v2.2.0] - 2026-07-20 - 障碍物高度过滤 + 地毯优化 + 数据库保护
 
 ### 🐛 Bug 修复

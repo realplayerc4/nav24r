@@ -13,10 +13,12 @@ CLAUDE.md - nav24r 项目特定指南
 ## 项目概述
 
 **名称：** nav24r（人形机器人自主导航系统）
-**版本：** 2.0.0
-**技术栈：** ROS 2 Jazzy + Python 3.10+ + Factor Perception SDK + RTAB-Map + Nav2
+**版本：** 2.3.0
+**技术栈：** ROS 2 Jazzy + Python 3.12 + Factor Perception SDK + RTAB-Map + Nav2
 **构建系统：** ament_python
 **许可证：** MIT
+
+**项目状态：** 建图、修图、定位、导航全流程已测试通过，生产就绪。
 
 ---
 
@@ -24,45 +26,12 @@ CLAUDE.md - nav24r 项目特定指南
 
 ### Python 规则
 
-- **版本：** Python 3.10+
+- **版本：** Python 3.12+
 - **格式化：** 遵循 PEP 8
 - **导入顺序：** 标准库 → ROS 2 → 第三方 → 本地模块
 - **字符串引号：** 单引号（除非包含单引号）
 - **类型提示：** 鼓励但不强制
 - **文档字符串：** Google 风格（简短而实用）
-
-```python
-#!/usr/bin/env python3
-"""
-模块简短描述（一句话）
-
-详细描述（可选）
-"""
-
-from typing import Optional  # 标准库
-import os
-import logging
-
-import rclpy  # ROS 2
-from rclpy.node import Node
-
-import yaml  # 第三方库
-
-from .local_module import MyClass  # 本地模块
-
-
-def example_function(param: str) -> bool:
-    """简短描述（Google 风格文档字符串）
-
-    Args:
-        param: 参数描述
-
-    Returns:
-        返回值描述
-    """
-    # 实现逻辑
-    pass
-```
 
 ### Shell 脚本规则
 
@@ -72,26 +41,6 @@ def example_function(param: str) -> bool:
 - **函数命名：** 小写+下划线（`snake_case`）
 - **变量：** 大写常量，小写+下划线变量
 
-```bash
-#!/bin/bash
-set -euo pipefail
-
-# 常量（大写+下划线）
-CONFIG_DIR="/home/yq/nav24r/config"
-DEFAULT_MODE="mapping"
-
-# 函数（小写+下划线）
-log_info() {
-    echo -e "\033[0;32m[INFO]\033[0m $1"
-}
-
-# 主逻辑
-main() {
-    log_info "Starting nav24r..."
-}
-main "$@"
-```
-
 ### YAML 配置规则
 
 - **缩进：** 2 空格
@@ -99,139 +48,30 @@ main "$@"
 - **字符串引号：** 必要时使用引号，避免歧义
 - **注释：** 使用 `#`，说明"为什么"而非"是什么"
 
-```yaml
-# Nav2 参数 - 人形机器人（为什么：身高 1.6m，重心高）
-bt_navigator:
-  ros__parameters:
-    use_sim_time: false
-    global_frame: map
-    robot_base_frame: base_link  # 统一使用 base_link（而非 base_footprint）
-```
-
 ### JSON 配置规则
 
 - **缩进：** 2 空格
 - **引号：** 双引号（JSON 标准）
 - **尾部逗号：** 不允许
 
-```json
-{
-  "camera": {
-    "model": "OAK-D-PRO-W",
-    "resolution": "4K"
-  }
-}
-```
-
 ---
 
 ## ROS 2 约定
 
-### 包和命名
+### 命名规范
 
 - **包名：** 小写+下划线（`nav24r`）
 - **节点名：** 小写+下划线（`factor_perception_node`）
 - **话题名：** 小写+下划线（`/factor_perception/odom`）
-- **服务名：** 小写+下划线
-- **TF 坐标系：** 标准 ROS 2 约定（`base_link`, `odom`, `map`, `camera_link`）
+- **TF 坐标系：** `base_link`, `odom`, `map`, `camera_link`, `oak`
 
-### Launch 文件（Python 格式）
+### 关键参数
 
-- **格式：** 使用 Python launch 文件（而非 XML）
-- **参数化：** 使用 `DeclareLaunchArgument` + `LaunchConfiguration`
-- **条件执行：** 使用 `IfCondition` / `UnlessCondition`
-- **文件包含：** 使用 `IncludeLaunchDescription`
-- **包引用：** 使用 `FindPackageShare`
-
-```python
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.actions import Node
-from launch_ros.substitutions import FindPackageShare
-
-
-def generate_launch_description():
-    # 参数声明
-    use_sim_arg = DeclareLaunchArgument(
-        'use_sim_time',
-        default_value='false',
-        description='使用仿真时间'
-    )
-
-    # 节点配置
-    node = Node(
-        package='nav24r',
-        executable='my_node',
-        name='my_node',
-        parameters=[
-            {'use_sim_time': LaunchConfiguration('use_sim_time')}
-        ]
-    )
-
-    return LaunchDescription([
-        use_sim_arg,
-        node
-    ])
-```
-
-### ROS 2 节点最佳实践
-
-```python
-#!/usr/bin/env python3
-import rclpy
-from rclpy.node import Node
-
-
-class MyNode(Node):
-    def __init__(self):
-        super().__init__('my_node')
-
-        # 声明参数
-        self.declare_parameter('param_name', 'default_value')
-
-        # 订阅者/发布者
-        self.subscription = self.create_subscription(
-            msg_type,
-            'topic_name',
-            self.callback,
-            qos_profile
-        )
-
-        # 定时器
-        self.timer = self.create_timer(
-            timer_period_sec,
-            self.timer_callback
-        )
-
-        self.get_logger().info('节点已启动')  # ✅ 使用 self.get_logger()
-        # print('节点已启动')  # ❌ 不要使用 print
-
-    def callback(self, msg):
-        # 处理消息
-        pass
-
-    def timer_callback(self):
-        # 定时逻辑
-        pass
-
-
-def main(args=None):
-    rclpy.init(args=args)
-    node = MyNode()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
-
-
-if __name__ == '__main__':
-    main()
-```
+- **相机高度：** `cam_pos_z:=0.85`（OAK-D Pro W 安装高度）
+- **障碍物高度过滤：** 0.2m ~ 1.4m（RTAB-Map + Nav2 统一）
+- **默认数据库：** `~/rtabmap.db`（所有模式共用）
+- **IR 投影仪强度：** `ir_intensity:=0.8`
+- **depth_filter：** `true`
 
 ---
 
@@ -239,43 +79,51 @@ if __name__ == '__main__':
 
 ```
 nav24r/
-├── launch/                    # ROS 2 launch 文件（Python 格式）
-│   ├── nav24r_full.launch.py
-│   ├── factor_perception_isolated.launch.py
-│   └── nav2.launch.py
-├── config/                    # 配置文件
-│   ├── nav2_params.yaml
-│   ├── factor_perception_config.yaml
-│   ├── maps_config.json
-│   ├── cyclonedds.xml
-│   ├── rtabmap_light.rviz
+├── factor_perception_auto.launch.py  # 根目录 Launch（感知+SLAM，主入口）
+├── package.xml                        # ROS 2 包描述（ament_python）
+├── setup.py                           # 构建配置
+├── README.md / CHANGELOG.md / CLAUDE.md
+│
+├── config/                            # 配置文件
+│   ├── nav2_params.yaml              # Nav2 参数（高度过滤 0.2~1.4m）
+│   ├── factor_perception_config.yaml # 感知 SDK 配置
+│   ├── rtabmap.ini                   # RTAB-Map 参数（SDK 自带）
+│   ├── cyclonedds.xml                # Cyclone DDS 优化
+│   ├── maps_config.json              # 地图管理配置
 │   ├── mapping.rviz / mapping_3d.rviz
-│   ├── navigation.rviz
+│   ├── navigation.rviz / navigation_clean.rviz
 │   ├── octomap.rviz / octomap_3d.rviz
 │   ├── map_viewer_3d.rviz
-│   └── rtabmap_config_doc.md
-├── scripts/                   # 控制脚本
-│   ├── factor_control_panel.py
-│   ├── start_factor.sh
-│   ├── start_rtabmap_light.sh
-│   ├── factor_control.sh
-│   ├── analyze_map_quality.py
-│   ├── export_octomap.py
-│   ├── mock_odom_publisher.py
-│   ├── mock_pointcloud_publisher.py
-│   ├── test_runner.sh
-│   └── test_phase*.sh / test_simulation.py
-├── docs/                      # 技术文档（多篇）
-├── factor_perception/         # Factor Perception SDK（第三方，不修改）
-├── Calibrat/                  # IMU 校准工具
-│   ├── IMU/
-│   ├── raw2unCal.py
-│   ├── uncal2cal.py
-│   └── run_examples.py
-├── package.xml
-├── setup.py
-├── README.md
-└── CHANGELOG.md
+│   └── rtabmap_light.rviz
+│
+├── launch/                            # Launch 文件
+│   ├── nav24r_full.launch.py         # 完整系统（感知+SLAM+Nav2）
+│   ├── factor_perception_isolated.launch.py  # 隔离架构
+│   ├── nav2.launch.py                # 纯 Nav2
+│   └── simulation/                   # 仿真启动文件
+│
+├── scripts/                           # 工具脚本
+│   ├── factor_control_panel.py       # ⭐ 主入口：GUI 控制面板
+│   ├── start_factor.sh               # 智能启动脚本（建图/定位）
+│   ├── start_rtabmap_light.sh        # 轻量化建图启动
+│   ├── factor_control.sh             # Shell 快捷启动
+│   ├── analyze_map_quality.py        # 地图质量分析
+│   ├── export_octomap.py             # Octomap 导出
+│   ├── export_cloud_and_view.py      # 点云导出+RViz查看
+│   ├── clean_ground_false_positives.py  # 地面误判清理
+│   ├── cleanup_rtabmap.py            # RTAB-Map 节点清理工具
+│   ├── odom_covariance_fix.py        # 里程计协方差修复
+│   ├── ply_to_pointcloud.py          # PLY点云转ROS2 PointCloud2
+│   ├── mock_odom_publisher.py        # 仿真里程计
+│   ├── mock_pointcloud_publisher.py  # 仿真点云
+│   ├── test_runner.sh / test_simulation.py  # 测试框架
+│   └── test_phase*.sh               # 分阶段测试脚本
+│
+├── factor_perception/                 # Factor Perception SDK（第三方）
+├── Calibrat/                          # IMU/相机标定工具
+│   └── IMU/
+├── docs/                              # 技术文档
+└── book/                              # SDK 参考手册
 ```
 
 ---
@@ -296,6 +144,57 @@ nav24r/
 - **配置目录：** `/home/yq/nav24r/config`
 - **地图目录：** `~/rtabmap_maps/`
 - **默认数据库：** `~/rtabmap.db`
+- **日志目录：** `~/.local/share/nav24r/logs/`
+
+---
+
+## 常见任务
+
+### 启动方式
+
+**唯一主入口 — 控制面板：**
+```bash
+python3 scripts/factor_control_panel.py
+```
+
+所有功能通过 GUI 按钮操作：
+
+| 按钮 | 功能 | 说明 |
+|------|------|------|
+| 地图保护开关 | checkbox | 关闭时保护已有数据库，新建建图需二次确认 |
+| 🗺️ 新建建图 | 建图 | 清空数据库后重新建图（受保护开关约束） |
+| 🔄 续建 | 建图 | 加载已有数据库继续建图 |
+| 🧭 开始定位 | 定位 | 加载已有地图进入 localization 模式 |
+| 🚀 完整导航 | 导航 | Factor Perception + RTAB-Map + Nav2 全栈 |
+| 🗑️ 重置地图 | 清理 | 删除数据库（受保护开关约束） |
+| ⏹️ 停止 | 停止 | 停止所有 ROS 节点 |
+| 📊 RViz / RViz 3D | 可视化 | 2D 顶视角 / 3D 视角 |
+| 🗺️ 地图观察 | 可视化 | 启动地图观察器 |
+| 📁 数据库 | 工具 | rtabmap-databaseViewer |
+| 📊 地图质量 | 分析 | 地图质量评分报告 |
+| 🗺️ 导出Octomap | 导出 | 启动 Database Viewer 导出 Octomap |
+| ☁️ 导出点云+RViz | 导出 | PLY 点云转 ROS2 话题 + RViz 查看 |
+| ⚠️ 重置重建地图 | 清理 | 分析并清理地面误判障碍物 |
+| ✂️ 清理节点 | 工具 | 交互式删除 RTAB-Map 数据库节点 |
+| 🧪 测试报告 | 测试 | 运行测试框架并生成报告 |
+| 📋 查看日志 | 调试 | 查看控制面板日志 |
+
+**设备操作：**
+- 🔍 检测设备 — 手动检测 OAK-D 连接
+- 🔄 重启相机 — 软重启相机进程
+- ⚡ 强制重连 — 停止进程 + 重置 USB
+
+**无 GUI 环境替代方案：**
+```bash
+# 建图
+ros2 launch nav24r factor_perception_auto.launch.py cam_pos_z:=0.85
+
+# 定位
+ros2 launch nav24r factor_perception_auto.launch.py localization:=true db_path:=~/rtabmap.db
+
+# 完整导航
+ros2 launch nav24r nav24r_full.launch.py localization:=true
+```
 
 ---
 
@@ -303,50 +202,14 @@ nav24r/
 
 ### ROS 2 依赖（package.xml）
 
-- rclpy
-- robot_state_publisher
-- robot_localization
-- rtabmap_slam
-- depth_image_proc
-- nav2_bringup
-- nav2_mppi_controller
+- rclpy, robot_state_publisher, robot_localization
+- rtabmap_slam, depth_image_proc
+- nav2_bringup, nav2_mppi_controller
+- sensor_msgs, nav_msgs, tf2_ros
 
 ### Python 依赖（pip）
 
-- pyyaml
-- tkinter（系统包）
-
-**安装依赖：**
-```bash
-# ROS 2 依赖（通过 apt）
-sudo apt install ros-jazzy-rtabmap-slam ros-jazzy-nav2-bringup
-
-# Python 依赖
-pip3 install -r requirements.txt  # （如果存在）
-```
-
----
-
-## 常见任务
-
-### 启动模式
-
-**建图模式：**
-```bash
-~/nav24r/scripts/start_factor.sh -m mapping -d ~/rtabmap_maps/new_map.db
-```
-
-**定位/导航模式：**
-```bash
-~/nav24r/scripts/start_factor.sh -m localization -d ~/rtabmap.db
-```
-
-**启动所有节点（完整系统）：**
-```bash
-ros2 launch nav24r nav24r_full.launch.py
-```
-
-### 控制面板
+- pyyaml, numpy, opencv-python (headless)
 
 ---
 
@@ -374,29 +237,20 @@ ros2 launch nav24r nav24r_full.launch.py
 
 ## 调试技巧
 
-### ROS 2 命令
-
 ```bash
-# 查看所有话题
-ros2 topic list
-
-# 查看节点
-ros2 node list
+# 查看所有话题 / 节点 / 服务
+ros2 topic list && ros2 node list && ros2 service list
 
 # 回放话题
 ros2 topic echo /factor_perception/odom
 
-# 查看服务
-ros2 service list
+# TF 树可视化
+ros2 run tf2_tools view_frames
 
-# 运行时间分析
+# 日志
 ros2 run rqt_console rqt_console
+# 控制面板日志：~/.local/share/nav24r/logs/factor_control_panel.log
 ```
-
-### 日志位置
-
-- **ROS 2 日志：** `~/ros2_ws/log/`
-- **控制台输出：** 使用 `self.get_logger().info()` 而非 `print()`
 
 ---
 
@@ -410,6 +264,7 @@ ros2 run rqt_console rqt_console
 - [ ] TF 树完整（`ros2 run tf2_tools view_frames`）
 - [ ] Nav2 能接收目标点（`ros2 action send_goal`）
 - [ ] RTAB-Map 能生成地图
+- [ ] 控制面板各按钮功能正常
 
 ---
 
@@ -424,44 +279,16 @@ ros2 run rqt_console rqt_console
 - [ ] 测试 launch 文件语法
 - [ ] 验证关键参数更改
 
-### PR 描述模板
-
-```markdown
-## 变更说明
-简要描述做了什么
-
-## 变更类型
-- [ ] Bug 修复
-- [ ] 新功能
-- [ ] 配置优化
-- [ ] 文档更新
-
-## 测试验证
-- [ ] Launch 文件语法检查通过
-- [ ] 所有节点正常启动
-- [ ] 话题数据流验证
-- [ ] 手动功能测试
-
-## 相关 Issue
-Closes #（issue 编号）
-
-## 注意事项
-- 需要重新校准吗？
-- 影响现有地图吗？
-- 环境变量是否更新？
-```
-
 ---
 
 ## 资源链接
 
-- **ROS 2 文档：** https://docs.ros.org/en/humble/
+- **ROS 2 文档：** https://docs.ros.org/en/jazzy/
 - **Nav2 文档：** https://navigation.ros.org/
 - **RTAB-Map Wiki：** https://github.com/introlab/rtabmap/wiki
 - **项目 README：** `/home/yq/nav24r/README.md`
-- **集成指南：** `/home/yq/nav24r/factor_perception_nav2_guide.md`
 
 ---
 
-*最后更新：2026-06-29*
+*最后更新：2026-07-22*
 *全局准则：~/.claude/CLAUDE.md（Karpathy 编码原则）*

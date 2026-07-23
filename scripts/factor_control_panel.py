@@ -161,11 +161,14 @@ class FactorControlPanel:
                                         font=('Arial', 9, 'bold'), fg='#00ff88')
         self.usb_speed_label.pack(side=tk.RIGHT)
 
+        # 停止按钮放在设备区域右上角
+        stop_btn = tk.Button(device_frame, text="⏹️ 停止", width=10, height=1,
+                            command=self.stop_all, bg='#e63946', fg='white')
+        stop_btn.pack(side=tk.RIGHT, padx=5)
+
         device_btn_row = tk.Frame(device_frame)
         device_btn_row.pack(fill=tk.X, pady=5)
 
-        tk.Button(device_btn_row, text="🔍 检测设备", width=12, height=1,
-                 command=self.check_device_now, bg='#3d5a80', fg='white').pack(side=tk.LEFT, padx=3)
         tk.Button(device_btn_row, text="🔄 重启相机", width=12, height=1,
                  command=self.restart_camera, bg='#e07c24', fg='white').pack(side=tk.LEFT, padx=3)
         tk.Button(device_btn_row, text="⚡ 强制重连", width=12, height=1,
@@ -186,7 +189,7 @@ class FactorControlPanel:
         self.db_size_var = tk.StringVar(value="计算中...")
         tk.Label(db_row, textvariable=self.db_size_var, font=('Arial', 9, 'bold'), fg='#ffaa00', bg='#2b2b2b').pack(side=tk.RIGHT)
 
-        # 地图保护开关：默认关闭，关闭时不允许覆盖已有数据库
+        # 地图保护开关
         self.allow_overwrite_var = tk.BooleanVar(value=False)
         self.chk_overwrite = tk.Checkbutton(db_info_frame,
             text="允许覆盖现有地图（关闭时保护已有数据库）",
@@ -195,6 +198,20 @@ class FactorControlPanel:
             bg='#2b2b2b', fg='#ffaa00',
             selectcolor='#2b2b2b', activebackground='#2b2b2b')
         self.chk_overwrite.pack(anchor=tk.W, pady=2)
+
+        # 数据库操作按钮（同一行）
+        db_btn_row = tk.Frame(db_info_frame)
+        db_btn_row.pack(fill=tk.X, pady=5)
+        tk.Button(db_btn_row, text="🗑️ 重置地图", width=12, height=1,
+                 command=self.reset_map, bg='#c0392b', fg='white').pack(side=tk.LEFT, padx=3)
+        tk.Button(db_btn_row, text="🗺️ 导出Octomap", width=12, height=1,
+                 command=self.export_octomap, bg='#16a085', fg='white').pack(side=tk.LEFT, padx=3)
+        tk.Button(db_btn_row, text="☁️ 导出点云+RViz", width=12, height=1,
+                 command=self.export_cloud_and_view, bg='#16a085', fg='white').pack(side=tk.LEFT, padx=3)
+        tk.Button(db_btn_row, text="🧹 清理地面误判", width=12, height=1,
+                 command=self.clean_ground_false_positive, bg='#e67e22', fg='white').pack(side=tk.LEFT, padx=3)
+        tk.Button(db_btn_row, text="✂️ 清理节点", width=12, height=1,
+                 command=self.launch_cleanup_tool, bg='#e67e22', fg='white').pack(side=tk.LEFT, padx=3)
 
         btn_frame = tk.LabelFrame(self.root, text="功能", font=('Arial', 11), padx=10, pady=10)
         btn_frame.pack(fill=tk.X, padx=20, pady=5)
@@ -216,42 +233,24 @@ class FactorControlPanel:
         self.btn_nav.pack(side=tk.LEFT, padx=5)
         self.ros_buttons.append(self.btn_nav)
 
-        btn_row2 = tk.Frame(btn_frame)
-        btn_row2.pack(pady=5)
-        self.btn_full_nav = tk.Button(btn_row2, text="🚀 完整导航", width=14, height=2,
+        self.btn_full_nav = tk.Button(btn_row1, text="🚀 完整导航", width=14, height=2,
             command=self.start_full_nav, bg='#3d5a80', fg='white')
         self.btn_full_nav.pack(side=tk.LEFT, padx=5)
         self.ros_buttons.append(self.btn_full_nav)
 
-        self.btn_reset = tk.Button(btn_row2, text="🗑️ 重置地图", width=14, height=2,
-            command=self.reset_map, bg='#c0392b', fg='white')
-        self.btn_reset.pack(side=tk.LEFT, padx=5)
-
-        self.btn_stop = tk.Button(btn_row2, text="⏹️ 停止", width=14, height=2,
-            command=self.stop_all, bg='#e63946', fg='white')
-        self.btn_stop.pack(side=tk.LEFT, padx=5)
+        btn_row2 = tk.Frame(btn_frame)
+        btn_row2.pack(pady=5)
+        tk.Button(btn_row2, text="📊 RViz", width=14, height=2, command=self.launch_rviz, bg='#4a7c59', fg='white').pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_row2, text="📊 RViz 3D", width=14, height=2, command=self.launch_rviz_3d, bg='#4a7c59', fg='white').pack(side=tk.LEFT, padx=5)
+        self.btn_database = tk.Button(btn_row2, text="📁 数据库", width=14, height=2,
+            command=self.view_database, bg='#4a7c59', fg='white')
+        self.btn_database.pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_row2, text="📊 地图质量", width=14, height=2, command=self.analyze_map_quality, bg='#e67e22', fg='white').pack(side=tk.LEFT, padx=5)
 
         btn_row3 = tk.Frame(btn_frame)
         btn_row3.pack(pady=5)
-        tk.Button(btn_row3, text="📊 RViz", width=14, height=2, command=self.launch_rviz, bg='#4a7c59', fg='white').pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_row3, text="📊 RViz 3D", width=14, height=2, command=self.launch_rviz_3d, bg='#4a7c59', fg='white').pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_row3, text="🗺️ 地图观察", width=14, height=2, command=self.launch_map_viewer, bg='#4a7c59', fg='white').pack(side=tk.LEFT, padx=5)
-
-        btn_row4 = tk.Frame(btn_frame)
-        btn_row4.pack(pady=5)
-        self.btn_database = tk.Button(btn_row4, text="📁 数据库", width=14, height=2,
-            command=self.view_database, bg='#4a7c59', fg='white')
-        self.btn_database.pack(side=tk.LEFT, padx=5)
-
-        tk.Button(btn_row4, text="📊 地图质量", width=14, height=2, command=self.analyze_map_quality, bg='#e67e22', fg='white').pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_row4, text="🗺️ 导出Octomap", width=14, height=2, command=self.export_octomap, bg='#16a085', fg='white').pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_row4, text="☁️ 导出点云+RViz", width=14, height=2, command=self.export_cloud_and_view, bg='#16a085', fg='white').pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_row4, text="🧹 清理地面误判", width=14, height=2, command=self.clean_ground_false_positive, bg='#e67e22', fg='white').pack(side=tk.LEFT, padx=5)
-
-        btn_row5 = tk.Frame(btn_frame)
-        btn_row5.pack(pady=5)
-        tk.Button(btn_row5, text="🧪 测试报告", width=14, height=2, command=self.run_test_report, bg='#8e44ad', fg='white').pack(side=tk.LEFT, padx=5)
-        tk.Button(btn_row5, text="📋 查看日志", width=14, height=2, command=self.view_log, bg='#555555', fg='white').pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_row3, text="🧪 测试报告", width=14, height=2, command=self.run_test_report, bg='#8e44ad', fg='white').pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_row3, text="📋 查看日志", width=14, height=2, command=self.view_log, bg='#555555', fg='white').pack(side=tk.LEFT, padx=5)
 
         self.status_var = tk.StringVar(value="状态: 就绪")
         tk.Label(self.root, textvariable=self.status_var, fg='#00ff88', bg='#2b2b2b', font=('Arial', 10)).pack(pady=5)
@@ -267,7 +266,7 @@ class FactorControlPanel:
         tk.Label(param_frame, text=f"camera_cpu={cam_cpu}  |  imu_cpu={imu_cpu}  |  rgb_fps={rgb_fps}  |  depth_filter={depth_filter}  |  ir_intensity={ir_intensity}",
                  fg='#cc8844', bg='#2b2b2b', font=('Consolas', 9)).pack()
 
-        tk.Label(self.root, text=f"💡 新建建图: 覆盖已有数据库 | 续建: 加载已有数据继续建图 | 重置地图: 删除数据库 | 续建时VIO重启属正常现象，RTAB-Map会自动对齐历史数据", fg='#888888', bg='#2b2b2b', font=('Arial', 8)).pack()
+        tk.Label(self.root, text="💡 续建时VIO重启属正常现象，RTAB-Map会自动对齐历史数据 | 数据库操作见📦区域 | 停止见右上角", fg='#888888', bg='#2b2b2b', font=('Arial', 8)).pack()
 
     def launch_rviz(self):
         ros_setup = self.app_config['ros']['setup_path']
@@ -289,6 +288,17 @@ class FactorControlPanel:
         subprocess.Popen(['bash', '-c', f'source {ros_setup} && rviz2 -d {config_dir}/map_viewer_3d.rviz'],
                          shell=False, start_new_session=True)
         self.status_var.set("状态: 地图观察器已启动（3D 查看器）")
+
+    def _launch_nav_rviz(self):
+        """导航模式下自动启动 RViz"""
+        ros_setup = self.app_config['ros']['setup_path']
+        config_dir = self.app_config['paths']['config_dir']
+        rviz_config = os.path.join(config_dir, 'navigation.rviz')
+        if not os.path.exists(rviz_config):
+            rviz_config = os.path.join(config_dir, 'navigation_clean.rviz')
+        subprocess.Popen(['bash', '-c', f'source {ros_setup} && rviz2 -d {rviz_config}'],
+                         shell=False, start_new_session=True)
+        self.status_var.set("状态: RViz 已启动（导航视角）")
 
     def _get_default_db(self):
         return DEFAULT_DB
@@ -515,6 +525,8 @@ class FactorControlPanel:
             subprocess.Popen(cmd, shell=False)
             self.set_ros_running(True, "定位模式")
             logger.info(f"启动定位模式: {db_path}")
+            # 自动启动 RViz（导航视角）
+            self.root.after(2000, lambda: self._launch_nav_rviz())
             # 启动后 3 秒验证实际 USB 速度
             self.root.after(3000, self._verify_usb_speed_after_launch)
         except Exception as e:
@@ -544,6 +556,8 @@ class FactorControlPanel:
             subprocess.Popen(cmd, shell=False)
             self.set_ros_running(True, "完整导航")
             logger.info(f"启动完整导航: {db_path}")
+            # 自动启动 RViz（导航视角）
+            self.root.after(2000, lambda: self._launch_nav_rviz())
             # 启动后 3 秒验证实际 USB 速度
             self.root.after(3000, self._verify_usb_speed_after_launch)
         except Exception as e:
@@ -832,10 +846,17 @@ class FactorControlPanel:
 
         # 显示分析结果，询问是否清理
         analysis = result.stdout
-        if not messagebox.askyesno("确认清理",
-            f"地图分析结果:\n\n{analysis}\n"
-            f"是否清理并重新建图？\n"
-            f"（数据库将备份后删除，下次建图使用新参数）"):
+        confirm_msg = (
+            f"⚠️  即将删除整个数据库 ⚠️\n\n"
+            f"{analysis}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"这将执行以下操作：\n"
+            f"  1. 备份当前数据库\n"
+            f"  2. 永久删除 ~/rtabmap.db\n"
+            f"  3. 需要重新建图才能恢复导航\n\n"
+            f"此操作不可撤销！是否继续？"
+        )
+        if not messagebox.askyesno("⚠️ 确认删除数据库", confirm_msg, icon="warning"):
             self.status_var.set("状态: 已取消清理")
             return
 
@@ -862,6 +883,36 @@ class FactorControlPanel:
             f"  • depth_filter=true")
         self.status_var.set("状态: 地图已清理")
         self.update_db_size()
+
+    def launch_cleanup_tool(self):
+        """启动 RTAB-Map 节点清理工具（独立窗口）"""
+        db_path = self._get_default_db()
+        if not os.path.exists(db_path):
+            messagebox.showinfo("提示", f"数据库不存在:\n{db_path}\n\n无需清理")
+            return
+
+        # 地图保护开关：需要先关闭保护才能操作数据库
+        if not self.allow_overwrite_var.get():
+            messagebox.showwarning("地图保护",
+                f"地图保护已开启，无法修改数据库:\n{db_path}\n\n"
+                f"请先勾选「允许覆盖现有地图」")
+            return
+
+        script_path = os.path.join(self.app_config['paths']['scripts_dir'], 'cleanup_rtabmap.py')
+        if not os.path.exists(script_path):
+            messagebox.showerror("错误", f"清理脚本不存在:\n{script_path}")
+            return
+
+        try:
+            subprocess.Popen(
+                ['python3', script_path, db_path],
+                shell=False, start_new_session=True
+            )
+            self.status_var.set(f"状态: 节点清理工具已启动")
+            logger.info(f"启动节点清理工具: {db_path}")
+        except Exception as e:
+            logger.error(f"启动清理工具失败: {e}")
+            messagebox.showerror("错误", f"启动清理工具失败:\n{str(e)}")
 
     def view_database(self):
         db_path = self._get_default_db()
@@ -1303,7 +1354,6 @@ done
             ("续建", self.btn_continue),
             ("开始定位", self.btn_nav),
             ("完整导航", self.btn_full_nav),
-            ("重置地图", self.btn_reset),
             ("数据库", self.btn_database),
         ]
         for name, btn in btn_tests:

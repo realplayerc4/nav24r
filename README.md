@@ -96,6 +96,7 @@ python3 scripts/factor_control_panel.py
 | 📷 设备状态 | OAK-D 连接/USB速度实时监控 |
 | 📊 地图质量 | 地图质量分析报告 |
 | 🧹 清理地面误判 | 分析并清理地毯等弱纹理地面的误判障碍物 |
+| ✂️ 清理节点 | 交互式浏览和删除 RTAB-Map 数据库中的节点 |
 | 🗺️ 导出Octomap | 启动 Database Viewer 导出 |
 | 📁 数据库 | 打开 rtabmap-databaseViewer |
 
@@ -163,9 +164,10 @@ nav24r/
 │   ├── factor_control.sh                  # Shell 快捷启动
 │   ├── analyze_map_quality.py             # 地图质量分析
 │   ├── export_octomap.py                  # Octomap 导出
-│   ├── clean_ground_false_positives.py    # 地面误判清理工具
-│   ├── odom_covariance_fix.py             # 里程计协方差修复
-│   ├── ply_to_pointcloud.py               # PLY点云转ROS2 PointCloud2
+│   ├── clean_ground_false_positives.py  # 地面误判清理工具
+│   ├── cleanup_rtabmap.py               # RTAB-Map 节点清理工具
+│   ├── odom_covariance_fix.py           # 里程计协方差修复
+│   ├── ply_to_pointcloud.py             # PLY点云转ROS2 PointCloud2
 │   ├── mock_odom_publisher.py             # 仿真里程计
 │   ├── mock_pointcloud_publisher.py       # 仿真点云
 │   └── test_runner.sh / test_simulation.py # 测试脚本
@@ -377,6 +379,16 @@ nav24r/
 ---
 
 ## 📝 版本历史
+
+### [v2.3.0] - 2026-07-22
+- Nav2 composition 模式修复（nav2_container 依赖修复）
+- Localization 模式修复（use_composition 布尔量处理）
+- 地图保护开关：默认关闭，保护已有数据库
+- 重置地图和清理工具也受地图保护开关约束
+- 新增 cleanup_rtabmap.py：交互式 RTAB-Map 节点清理工具
+- 新增 odom_covariance_fix.py：里程计协方差修复节点
+- 新增 ply_to_pointcloud.py：PLY 点云转 ROS2 PointCloud2
+- pre-commit hook 配置
 
 ### [v2.2.0] - 2026-07-20
 - 障碍物高度过滤 0.2m ~ 1.4m（RTAB-Map + Nav2 统一）

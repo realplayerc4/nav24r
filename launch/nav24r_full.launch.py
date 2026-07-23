@@ -192,20 +192,91 @@ def generate_launch_description():
     )
 
     # ============ Nav2 ============
+    # 手动创建 Nav2 节点（不通过 navigation_launch.py）
+    # 原因：navigation_launch.py 硬编码包含 collision_monitor，
+    # 但 opennav 版本的 collision_monitor 参数不兼容（observation_sources 要求非空）
+    # costmap 已处理避障，collision_monitor 非必需
 
-    # 使用 navigation_launch.py (不含 SLAM，使用 RTAB-Map 定位)
-    nav2_navigation = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([FindPackageShare('nav2_bringup'), 'launch', 'navigation_launch.py'])
-        ]),
-        launch_arguments={
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'autostart': LaunchConfiguration('autostart'),
-            'params_file': LaunchConfiguration('nav2_params_file'),
-            'use_composition': LaunchConfiguration('use_composition'),
-            'use_respawn': LaunchConfiguration('use_respawn'),
-            'log_level': LaunchConfiguration('log_level'),
-        }.items(),
+    nav2_controller = Node(
+        package='nav2_controller',
+        executable='controller_server',
+        ros_arguments=['--log-level', 'warn'],
+        parameters=[LaunchConfiguration('nav2_params_file')],
+        remappings=[('cmd_vel', 'cmd_vel_nav')],
+    )
+
+    nav2_smoother = Node(
+        package='nav2_smoother',
+        executable='smoother_server',
+        ros_arguments=['--log-level', 'warn'],
+        parameters=[LaunchConfiguration('nav2_params_file')],
+    )
+
+    nav2_planner = Node(
+        package='nav2_planner',
+        executable='planner_server',
+        ros_arguments=['--log-level', 'warn'],
+        parameters=[LaunchConfiguration('nav2_params_file')],
+    )
+
+    nav2_route = Node(
+        package='nav2_route',
+        executable='route_server',
+        ros_arguments=['--log-level', 'warn'],
+        parameters=[LaunchConfiguration('nav2_params_file')],
+        remappings=[('tf', 'tf'), ('tf_static', 'tf_static')],
+    )
+
+    nav2_behaviors = Node(
+        package='nav2_behaviors',
+        executable='behavior_server',
+        ros_arguments=['--log-level', 'warn'],
+        parameters=[LaunchConfiguration('nav2_params_file')],
+        remappings=[('cmd_vel', 'cmd_vel_nav')],
+    )
+
+    nav2_bt_navigator = Node(
+        package='nav2_bt_navigator',
+        executable='bt_navigator',
+        ros_arguments=['--log-level', 'warn'],
+        parameters=[LaunchConfiguration('nav2_params_file')],
+        remappings=[('tf', 'tf'), ('tf_static', 'tf_static')],
+    )
+
+    nav2_waypoint = Node(
+        package='nav2_waypoint_follower',
+        executable='waypoint_follower',
+        ros_arguments=['--log-level', 'warn'],
+        parameters=[LaunchConfiguration('nav2_params_file')],
+        remappings=[('tf', 'tf'), ('tf_static', 'tf_static')],
+    )
+
+    nav2_velocity_smoother = Node(
+        package='nav2_velocity_smoother',
+        executable='velocity_smoother',
+        ros_arguments=['--log-level', 'warn'],
+        parameters=[LaunchConfiguration('nav2_params_file')],
+        remappings=[('cmd_vel', 'cmd_vel_nav')],
+    )
+
+    nav2_lifecycle = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lifecycle_manager_navigation',
+        ros_arguments=['--log-level', 'warn'],
+        parameters=[
+            {'autostart': LaunchConfiguration('autostart')},
+            {'node_names': [
+                'controller_server',
+                'smoother_server',
+                'planner_server',
+                'route_server',
+                'behavior_server',
+                'velocity_smoother',
+                'bt_navigator',
+                'waypoint_follower',
+            ]},
+        ],
     )
 
     # ============ 返回 LaunchDescription ============
@@ -245,5 +316,13 @@ def generate_launch_description():
         robot_state_publisher_node,
         factor_perception_container,
         rtabmap_viz,
-        nav2_navigation,
+        nav2_controller,
+        nav2_smoother,
+        nav2_planner,
+        nav2_route,
+        nav2_behaviors,
+        nav2_bt_navigator,
+        nav2_waypoint,
+        nav2_velocity_smoother,
+        nav2_lifecycle,
     ])

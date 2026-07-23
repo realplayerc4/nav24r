@@ -11,31 +11,9 @@ bt_navigator:
     odom_topic: /factor_perception/odom
     bt_loop_duration: 10
     default_server_timeout: 20
-    plugin_lib_names:
-      - nav2_compute_path_to_pose_action_bt_node
-      - nav2_compute_path_through_poses_action_bt_node
-      - nav2_smooth_path_action_bt_node
-      - nav2_follow_path_action_bt_node
-      - nav2_spin_action_bt_node
-      - nav2_wait_action_bt_node
-      - nav2_back_up_action_bt_node
-      - nav2_drive_on_heading_bt_node
-      - nav2_clear_costmap_service_bt_node
-      - nav2_is_stuck_condition_bt_node
-      - nav2_goal_reached_condition_bt_node
-      - nav2_goal_updated_condition_bt_node
-      - nav2_is_path_valid_condition_bt_node
-      - nav2_distance_controller_bt_node
-      - nav2_speed_controller_bt_node
-      - nav2_truncate_path_action_bt_node
-      - nav2_goal_updater_node_bt_node
-      - nav2_recovery_node_bt_node
-      - nav2_pipeline_sequence_bt_node
-      - nav2_round_robin_node_bt_node
-      - nav2_transform_available_condition_bt_node
-      - nav2_time_expired_condition_bt_node
-      - nav2_distance_traveled_condition_bt_node
-      - nav2_single_trigger_bt_node
+    # plugin_lib_names 使用 bt_navigator 默认值即可
+    # 显式指定会导致 ComputePathToPose ID 重复注册
+
 
 controller_server:
   ros__parameters:
@@ -123,13 +101,19 @@ local_costmap:
       height: 3
       resolution: 0.05
       track_unknown_space: False
-      always_send_full_costmap: False
+      always_send_full_costmap: True
       update_frequency: 5.0
       publish_frequency: 2.0
       filter_threshold: 0.1
+      transform_tolerance: 0.4  # RTAB-Map TF 初始化需要时间
 
-      # 机器人 footprint (圆形半径0.5m，与 RTAB-Map GridGlobal FootprintRadius 和 global_costmap 统一)
-      footprint: "0.5"
+      # 机器人 footprint（16点近似圆形，半径0.5m）
+      # Nav2 不接受单数字简写，必须用多边形顶点列表
+      # 人形机器人用圆形 footprint，与 RTAB-Map GridGlobal FootprintRadius 统一
+      footprint: "[[0.5, 0.0], [0.461, 0.191], [0.354, 0.354], [0.191, 0.461], [0.0, 0.5], [-0.191, 0.461], [-0.354, 0.354], [-0.461, 0.191], [-0.5, 0.0], [-0.461, -0.191], [-0.354, -0.354], [-0.191, -0.461], [0.0, -0.5], [0.191, -0.461], [0.354, -0.354], [0.461, -0.191]]"
+
+      # 观测源（告诉 costmap 处理哪些层的观测数据）
+      observation_sources: pointcloud
 
       plugins: ["obstacle_layer", "inflation_layer"]
 
@@ -165,12 +149,19 @@ global_costmap:
       resolution: 0.05
       track_unknown_space: True
       use_maximum: False
+      always_send_full_costmap: True
       unknown_cost_value: 255
       update_frequency: 1.0
       publish_frequency: 1.0
 
-      # 机器人 footprint (圆形半径0.5m，与 local_costmap 统一)
-      footprint: "0.5"
+      # 地图 topic（RTAB-Map 直接发布到 /factor_perception/map）
+      map_topic: /factor_perception/map
+
+      # 机器人 footprint（16点近似圆形，半径0.5m，与 local_costmap 统一）
+      footprint: "[[0.5, 0.0], [0.461, 0.191], [0.354, 0.354], [0.191, 0.461], [0.0, 0.5], [-0.191, 0.461], [-0.354, 0.354], [-0.461, 0.191], [-0.5, 0.0], [-0.461, -0.191], [-0.354, -0.354], [-0.191, -0.461], [0.0, -0.5], [0.191, -0.461], [0.354, -0.354], [0.461, -0.191]]"
+
+      # 观测源（告诉 costmap 处理哪些层的观测数据）
+      observation_sources: pointcloud
 
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
 
@@ -184,7 +175,7 @@ global_costmap:
         unknown_cost_value: 255
         trinary_costmap: True
         track_unknown_space: True
-        transform_tolerance: 1.0
+        transform_tolerance: 2.0  # RTAB-Map 建图/定位初始化需要时间
 
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
@@ -212,7 +203,8 @@ planner_server:
     expected_planner_frequency: 20.0
     planner_plugins: ["GridBased"]
     GridBased:
-      plugin: "nav2_navfn_planner/NavfnPlanner"
+      # 全局路径规划器（NavFn，支持 A*）
+      plugin: "nav2_navfn_planner::NavfnPlanner"
       tolerance: 0.5
       use_astar: True
       allow_unknown: True
@@ -232,15 +224,15 @@ behavior_server:
     use_sim_time: False
     behavior_plugins: ["spin", "backup", "drive_on_heading", "wait"]
     spin:
-      plugin: "nav2_behaviors/Spin"
+      plugin: "nav2_behaviors::Spin"
       spin_dist: 1.57
       time_allowance: 30.0
     backup:
-      plugin: "nav2_behaviors/BackUp"
+      plugin: "nav2_behaviors::BackUp"
       backup_dist: 0.3
       time_allowance: 30.0
     drive_on_heading:
-      plugin: "nav2_behaviors/DriveOnHeading"
+      plugin: "nav2_behaviors::DriveOnHeading"
       dist_to_travel: 0.5
       time_allowance: 30.0
     wait:
@@ -270,16 +262,20 @@ collision_monitor:
     cmd_vel_in_topic: "cmd_vel_smoothed"
     cmd_vel_out_topic: "cmd_vel"
     state_topic: "collision_monitor_state"
-    source_topics: ["pointcloud"]
+    transform_tolerance: 0.2
+    source_timeout: 1.0
+    base_shift_correction: True
     stop_pub_timeout: 2.0
-    sources:
-      pointcloud:
-        topic: "/factor_perception/depth/points"
-        data_type: "PointCloud2"
-        clearing: True
-        marking: True
-        min_z: 0.05
-        max_z: 1.5
+    observation_sources: []
+    # 使用机器人 footprint 接近检测（与 costmap footprint 一致）
+    polygons: ["FootprintApproach"]
+    FootprintApproach:
+      type: "polygon"
+      action_type: "approach"
+      footprint_topic: "/local_costmap/published_footprint"
+      time_before_collision: 1.2
+      simulation_time_step: 0.1
+      min_points: 6
 
 costmap_filters:
   ros__parameters:
