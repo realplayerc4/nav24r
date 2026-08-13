@@ -136,7 +136,14 @@
       "WebFetch(domain:mcp.flowus.cn)",
       "Bash(gh repo *)",
       "WebFetch(domain:navigation.ros.org)",
-      "WebFetch(domain:introlab.ulaval.ca)"
+      "WebFetch(domain:introlab.ulaval.ca)",
+      "Skill(claude-api)",
+      "Bash(rtabmap-databaseViewer)",
+      "Bash(npm list *)",
+      "Bash(opencode --help)",
+      "Bash(opencode --version)",
+      "WebFetch(domain:api.stepfun.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "additionalDirectories": [
       "/home/yq",

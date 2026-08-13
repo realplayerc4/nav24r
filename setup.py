@@ -36,6 +36,10 @@ setup(
             'generate_test_map = scripts.generate_test_map:main',
             'test_simulation = scripts.test_simulation:main',
             'odom_covariance_fix = scripts.odom_covariance_fix:main',
+            't1_bridge = scripts.t1_bridge:main',
+            'mock_trajectory_publisher = scripts.mock_trajectory_publisher:main',
+            'mock_map_publisher = scripts.mock_map_publisher:main',
+            'test_nav2_goal = scripts.test_nav2_goal:main',
         ],
     },
 )

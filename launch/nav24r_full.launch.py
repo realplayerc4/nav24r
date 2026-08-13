@@ -71,12 +71,14 @@ def generate_launch_description():
         ]), description='Path to Nav2 parameter YAML file')
     map_subscribe_transient_local_arg = DeclareLaunchArgument('map_subscribe_transient_local',
         default_value='true', description='Subscribe to map with TRANSIENT_LOCAL durability')
-    use_composition_arg = DeclareLaunchArgument('use_composition', default_value='False',
-        description='Use composed bringup via lifecycle manager')
-    use_respawn_arg = DeclareLaunchArgument('use_respawn', default_value='false',
-        description='Respawn crashed Nav2 nodes')
     log_level_arg = DeclareLaunchArgument('log_level', default_value='warn',
         description='Nav2 node log level (debug, info, warn, error, fatal)')
+
+    # T1 Bridge 参数
+    use_t1_bridge_arg = DeclareLaunchArgument('use_t1_bridge', default_value='false',
+        description='Enable T1 robot bridge (Nav2 cmd_vel → T1 SDK)')
+    t1_network_if_arg = DeclareLaunchArgument('t1_network_interface', default_value='enx0826ae3beeb8',
+        description='T1 SDK network interface (e.g. eth0)')
 
     # ============ Factor Perception ============
 
@@ -202,7 +204,6 @@ def generate_launch_description():
         executable='controller_server',
         ros_arguments=['--log-level', 'warn'],
         parameters=[LaunchConfiguration('nav2_params_file')],
-        remappings=[('cmd_vel', 'cmd_vel_nav')],
     )
 
     nav2_smoother = Node(
@@ -224,7 +225,6 @@ def generate_launch_description():
         executable='route_server',
         ros_arguments=['--log-level', 'warn'],
         parameters=[LaunchConfiguration('nav2_params_file')],
-        remappings=[('tf', 'tf'), ('tf_static', 'tf_static')],
     )
 
     nav2_behaviors = Node(
@@ -232,7 +232,6 @@ def generate_launch_description():
         executable='behavior_server',
         ros_arguments=['--log-level', 'warn'],
         parameters=[LaunchConfiguration('nav2_params_file')],
-        remappings=[('cmd_vel', 'cmd_vel_nav')],
     )
 
     nav2_bt_navigator = Node(
@@ -251,14 +250,6 @@ def generate_launch_description():
         remappings=[('tf', 'tf'), ('tf_static', 'tf_static')],
     )
 
-    nav2_velocity_smoother = Node(
-        package='nav2_velocity_smoother',
-        executable='velocity_smoother',
-        ros_arguments=['--log-level', 'warn'],
-        parameters=[LaunchConfiguration('nav2_params_file')],
-        remappings=[('cmd_vel', 'cmd_vel_nav')],
-    )
-
     nav2_lifecycle = Node(
         package='nav2_lifecycle_manager',
         executable='lifecycle_manager',
@@ -272,11 +263,25 @@ def generate_launch_description():
                 'planner_server',
                 'route_server',
                 'behavior_server',
-                'velocity_smoother',
                 'bt_navigator',
                 'waypoint_follower',
             ]},
         ],
+    )
+
+    # ============ T1 Bridge ============
+    # Nav2 cmd_vel → 加速进化 T1 SDK (B1LocoClient.Move)
+    t1_bridge = Node(
+        package='nav24r',
+        executable='t1_bridge',
+        name='t1_bridge',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_t1_bridge')),
+        parameters=[{
+            'network_interface': LaunchConfiguration('t1_network_interface'),
+            'watchdog_timeout': 2.0,
+            'cmd_vel_topic': '/cmd_vel',
+        }],
     )
 
     # ============ 返回 LaunchDescription ============
@@ -309,9 +314,9 @@ def generate_launch_description():
         autostart_arg,
         nav2_params_file_arg,
         map_subscribe_transient_local_arg,
-        use_composition_arg,
-        use_respawn_arg,
         log_level_arg,
+        use_t1_bridge_arg,
+        t1_network_if_arg,
         # 节点
         robot_state_publisher_node,
         factor_perception_container,
@@ -323,6 +328,6 @@ def generate_launch_description():
         nav2_behaviors,
         nav2_bt_navigator,
         nav2_waypoint,
-        nav2_velocity_smoother,
         nav2_lifecycle,
+        t1_bridge,
     ])

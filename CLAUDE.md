@@ -116,6 +116,9 @@ nav24r/
 │   ├── ply_to_pointcloud.py          # PLY点云转ROS2 PointCloud2
 │   ├── mock_odom_publisher.py        # 仿真里程计
 │   ├── mock_pointcloud_publisher.py  # 仿真点云
+│   ├── t1_bridge.py                 # Nav2 → T1 速度桥接节点
+│   ├── mock_trajectory_publisher.py # Mock 轨迹测试 (t1_bridge → SDK)
+│   ├── test_nav2_goal.py                 # Nav2 目标导航测试
 │   ├── test_runner.sh / test_simulation.py  # 测试框架
 │   └── test_phase*.sh               # 分阶段测试脚本
 │
@@ -124,6 +127,10 @@ nav24r/
 │   └── IMU/
 ├── docs/                              # 技术文档
 └── book/                              # SDK 参考手册
+└── slambAK/                           # 旧版系统（曾稳定控制机器人）
+    ├── boosterxjw/                    # C++ Nav2→T1 桥接节点（生产验证）
+    ├── factor_perception/             # 旧版感知 SDK
+    └── slam文档.txt                   # 旧系统启动流程记录
 ```
 
 ---
@@ -145,6 +152,19 @@ nav24r/
 - **地图目录：** `~/rtabmap_maps/`
 - **默认数据库：** `~/rtabmap.db`
 - **日志目录：** `~/.local/share/nav24r/logs/`
+
+### 网络拓扑
+
+```
+nav24r 电脑 (192.168.10.103) ──LAN 直连── Robot eth0 (192.168.10.102)
+                                       │
+                                    FastDDS (domain 0)
+                                    T1 SDK DDS + ROS2 Humble
+```
+
+- 统一接口：`enx0826ae3beeb8`（USB LAN）
+- 机器人 IP：`192.168.10.102`
+- WiFi (`192.168.0.x`) 不使用
 
 ---
 
@@ -194,6 +214,12 @@ ros2 launch nav24r factor_perception_auto.launch.py localization:=true db_path:=
 
 # 完整导航
 ros2 launch nav24r nav24r_full.launch.py localization:=true
+
+# T1 双足机器人导航（LAN 直连）
+ros2 launch nav24r nav24r_full.launch.py localization:=true use_t1_bridge:=true
+
+# T1 SDK 连通性测试
+python3 scripts/test_t1_sdk.py
 ```
 
 ---

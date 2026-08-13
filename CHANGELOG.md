@@ -1,5 +1,59 @@
 # 变更日志
 
+## [v2.5.0] - 2026-08-13 - Python SDK 验证 + LAN 直连
+
+### 🆕 新功能
+- ✅ `scripts/test_t1_sdk.py`：T1 SDK 最小连通性测试脚本
+- ✅ Python SDK 核心功能全部验证通过：
+  - 模式切换 (Damping → Prepare → Walking)
+  - 运动控制 (Move / SendApiRequest)
+  - 状态读取 (B1LowStateSubscriber 23电机 + IMU ~500Hz)
+  - 里程计订阅 (B1OdometerStateSubscriber ~600Hz)
+- ✅ 控制面板 T1 方向键映射修正（W/S=前后, A/D=左右, Q/E=转向）
+
+### 🔧 改动
+- ✅ 网络接口统一为 LAN 直连 `enx0826ae3beeb8`（废弃 WiFi 跳板）
+- ✅ `t1_bridge.py` 默认 network_interface → `enx0826ae3beeb8`
+- ✅ `nav24r_full.launch.py` 默认 t1_network_interface → `enx0826ae3beeb8`
+- ✅ `factor_control_panel.py` T1 初始化接口 → `enx0826ae3beeb8`
+- ✅ A/D 键 vy 符号修正：A=左(vy负), D=右(vy正)，与机器人实际移动方向一致
+- ✅ 模式检测改用 subscriber 推断（B1LowStateSubscriber 电机扭矩），不再依赖 GetMode RPC
+- ✅ `t1_bridge.py` 添加 B1LowStateSubscriber 用于 Walking 模式检测
+
+### 📚 文档
+- ✅ `docs/t1_bridge_status.md`：更新网络拓扑、SDK 验证结果、坐标系说明
+- ✅ `CLAUDE.md`：更新网络拓扑、启动命令
+- ✅ `README.md`：T1 网络接口参数更新
+- ✅ 删除废弃的 FastDDS XML 配置文件（t1_sdk_fastdds.xml, t1_sdk_fastdds_unicast.xml）
+
+### 📋 机器人信息
+- 固件: v1.1.0.0-release (branch: release/v1.1.0-20250421)
+- SDK: booster_robotics_sdk_python==1.5.6
+- SSH: booster@192.168.10.102 (LAN)
+
+---
+
+## [v2.4.0] - 2026-08-10 - T1 双足机器人桥接
+
+### 🆕 新功能
+- ✅ `scripts/t1_bridge.py`：Nav2 → T1 SDK 速度桥接节点
+  - 订阅 `/cmd_vel_nav`，调用 `B1LocoClient.Move(vx, 0.0, vyaw)`
+  - 500ms 看门狗自动停车，`_is_stopping` 标志位防重复触发
+  - 指令节流 ≤20Hz，速度变化 >0.05 时立即转发
+  - SDK 连接超时优雅关闭（`raise RuntimeError` → `finally`）
+  - 退出时自动切换 Damping 模式
+- ✅ `launch/nav24r_full.launch.py`：新增 `use_t1_bridge` / `t1_network_interface` 参数
+- ✅ `setup.py`：注册 `t1_bridge` console_scripts 入口
+- ✅ `docs/t1_bridge_status.md`：T1 Bridge 设计文档与旧代码对比
+- ✅ `scripts/mock_trajectory_publisher.py`：Mock 轨迹测试 t1_bridge → SDK 链路
+- ✅ `scripts/test_nav2_goal.py`：Nav2 目标导航测试（发目标 → 验证 cmd_vel 输出合理性）
+
+### 📚 文档
+- ✅ README.md 新增 T1 双足机器人导航章节
+- ✅ CHANGELOG.md 新增 v2.4.0
+
+---
+
 ## [v2.3.0] - 2026-07-22 - Nav2 修复 + 地图保护 + 清理工具
 
 ### 🐛 Bug 修复

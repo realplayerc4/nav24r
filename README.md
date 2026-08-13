@@ -6,7 +6,7 @@
 
 基于 ROS2 Jazzy 的人形机器人自主导航系统，集成 Factor Perception SDK、RTAB-Map SLAM 和 Nav2 导航栈。
 
-**版本**: v2.2.0 | **相机**: OAK-D Pro W (0.85m 安装高度) | **障碍物高度过滤**: 0.2m ~ 1.4m
+**版本**: v2.4.0 | **相机**: OAK-D Pro W (0.85m 安装高度) | **障碍物高度过滤**: 0.2m ~ 1.4m
 
 ---
 
@@ -27,6 +27,7 @@
 - 📊 **数据分析** - 地图质量评分系统（100分制）
 - 🔧 **易于配置** - 参数集中管理，可视化配置工具
 - 📖 **完善文档** - 中文文档齐全，包含使用指南和技术分析
+- 🤖 **T1 双足支持** - Nav2 导航输出桥接到加速进化 T1 机器人 SDK（可选）
 
 ---
 
@@ -170,6 +171,9 @@ nav24r/
 │   ├── ply_to_pointcloud.py             # PLY点云转ROS2 PointCloud2
 │   ├── mock_odom_publisher.py             # 仿真里程计
 │   ├── mock_pointcloud_publisher.py       # 仿真点云
+│   ├── t1_bridge.py                       # Nav2 → T1 速度桥接节点
+│   ├── mock_trajectory_publisher.py       # Mock 轨迹测试 (t1_bridge → SDK)
+│   ├── test_nav2_goal.py                 # Nav2 目标导航测试（验证 cmd_vel 输出）
 │   └── test_runner.sh / test_simulation.py # 测试脚本
 │
 ├── docs/                                   # 技术文档
@@ -178,6 +182,7 @@ nav24r/
 │   ├── nav2_integration_plan.md           # Nav2 集成方案
 │   ├── nav2_rtabmap_knowledge.md          # Nav2/RTAB-Map 知识要点 ⭐
 │   ├── WORK_SUMMARY_20260615.md           # 工作总结
+│   ├── t1_bridge_status.md                # T1 桥接状态文档
 │   ├── 因子空间感知SDK标准版使用手册.pdf  # SDK 官方手册
 │   └── ...（控制面板、地图分析、RViz 等使用指南）
 │
@@ -186,6 +191,10 @@ nav24r/
 │   └── IMU/                                # IMU 数据与处理脚本
 ├── book/                                   # SDK 参考手册
 ├── memory-bank/                            # 架构文档
+├── slambAK/                                # 旧版系统（曾稳定控制机器人）
+│   ├── boosterxjw/                         # C++ Nav2→T1 桥接节点（生产验证）
+│   ├── factor_perception/                  # 旧版感知 SDK
+│   └── slam文档.txt                        # 旧系统启动流程记录
 ├── CHANGELOG.md
 └── README.md
 ```
@@ -251,6 +260,40 @@ nav24r/
    # RViz2 中点击 "2D Pose Estimate" 设置起点
    # 点击 "Nav2 Goal" 设置目标点
    ```
+
+### T1 双足机器人导航
+
+将 Nav2 的速度输出桥接到加速进化 T1 双足机器人。
+
+**前置条件**:
+```bash
+pip install booster_robotics_sdk_python
+```
+
+**启动方式**:
+```bash
+ros2 launch nav24r nav24r_full.launch.py localization:=true use_t1_bridge:=true
+```
+
+**参数说明**:
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `use_t1_bridge` | `false` | 启用 T1 桥接节点 |
+| `t1_network_interface` | `enx0826ae3beeb8` | T1 SDK 网络接口 (USB LAN) |
+
+**数据流**:
+```
+Nav2 栈 → /cmd_vel_nav (Twist) → t1_bridge → B1LocoClient.Move(vx, 0, vyaw) → T1 机器人
+```
+
+**安全机制**:
+- 500ms 无指令自动停车（看门狗）
+- 退出时自动切换 Damping 模式
+- 指令频率限制 ≤20Hz
+
+详见 [docs/t1_bridge_status.md](docs/t1_bridge_status.md)
+
+> **架构说明**: 新代码 (`scripts/t1_bridge.py`) 沿用了旧系统 (`slambAK/`) 验证过的架构设计（Nav2 cmd_vel → SDK Move），改用 Python/ROS2 生态实现，与当前导航栈深度集成。旧版 C++ 系统曾稳定控制机器人运行。
 
 ### 地图保护
 
@@ -379,6 +422,30 @@ nav24r/
 ---
 
 ## 📝 版本历史
+
+## [v2.4.0] - 2026-08-10 - T1 双足机器人桥接
+
+### 🆕 新功能
+- ✅ `scripts/t1_bridge.py`：Nav2 → T1 SDK 速度桥接节点
+  - 订阅 `/cmd_vel_nav`，调用 `B1LocoClient.Move(vx, 0.0, vyaw)`
+  - 500ms 看门狗自动停车，`_is_stopping` 标志位防重复触发
+  - 指令节流 ≤20Hz，速度变化 >0.05 时立即转发
+  - SDK 连接超时优雅关闭（`raise RuntimeError` → `finally`）
+  - 退出时自动切换 Damping 模式
+- ✅ `launch/nav24r_full.launch.py`：新增 `use_t1_bridge` / `t1_network_interface` 参数
+- ✅ `setup.py`：注册 `t1_bridge` console_scripts 入口
+- ✅ `docs/t1_bridge_status.md`：T1 Bridge 设计文档与旧代码对比
+
+### 📚 文档
+- ✅ README.md 新增 T1 双足机器人导航章节
+- ✅ CHANGELOG.md 新增 v2.4.0
+
+### 🏗️ 架构
+- 新代码：`scripts/t1_bridge.py`（Python/ROS2，主力实现）
+- 旧代码：`slambAK/boosterxjw/`（C++，曾稳定控制 T1 机器人，保留作为回归对照）
+- `nav24r_full.launch.py` 通过 `use_t1_bridge` 参数可选启用
+
+---
 
 ### [v2.3.0] - 2026-07-22
 - Nav2 composition 模式修复（nav2_container 依赖修复）
