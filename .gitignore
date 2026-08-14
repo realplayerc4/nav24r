@@ -1,6 +1,10 @@
 __pycache__/
 build/
+build_py/
 install/
 log/
 .cache/
 .pytest_cache/
+.vscode/
+.claude/
+slambAK/

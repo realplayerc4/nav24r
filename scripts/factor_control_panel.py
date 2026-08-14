@@ -17,10 +17,17 @@ import math
 
 # T1 SDK（条件导入）
 try:
-    from booster_robotics_sdk_python import B1LocoClient, RobotMode, ChannelFactory
+    from booster_robotics_sdk_python import (
+        B1LocoClient, RobotMode, ChannelFactory, LocoApiId,
+        B1LowStateSubscriber, B1OdometerStateSubscriber,
+    )
     _sdk_available = True
 except ImportError:
     _sdk_available = False
+
+# 隔离 domain：电脑侧 ROS2 (Nav2/CycloneDDS) 用 42，
+# 避免与机器人 FastDDS(domain 0) 冲突（否则 Nav2 启动/bt_navigator 会失败，且干扰 SDK 导致 damping）
+os.environ['ROS_DOMAIN_ID'] = '42'
 
 LOG_DIR = os.path.expanduser("~/.local/share/nav24r/logs")
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -94,9 +101,10 @@ class FactorControlPanel:
         self.spinner = None
 
         # T1 机器人 SDK 状态
+        # 模式是"开关"：由按钮决定，不自动推断。初始未设置（None → 显示"模式: 未知"）
         self._t1_client = None
         self._t1_connected = False
-        self._t1_current_mode = RobotMode.kDamping if _sdk_available else None
+        self._t1_current_mode = None
         self._t1_move_active = False
         self._t1_move_timer = None
 
@@ -256,6 +264,10 @@ class FactorControlPanel:
         self.btn_t1_walking = tk.Button(t1_mode_row, text="Walking", width=10,
             command=lambda: self._t1_change_mode(RobotMode.kWalking), bg='#555555', fg='white')
         self.btn_t1_walking.pack(side=tk.LEFT, padx=3)
+        # Damping 红色警示：电机失去电力，切换前有二次确认弹窗
+        self.btn_t1_damping = tk.Button(t1_mode_row, text="Damping", width=10,
+            command=lambda: self._t1_change_mode(RobotMode.kDamping), bg='#c0392b', fg='white')
+        self.btn_t1_damping.pack(side=tk.LEFT, padx=3)
 
         # 方向控制按钮行
         t1_dir_row = tk.Frame(self.t1_frame)
@@ -269,10 +281,11 @@ class FactorControlPanel:
                  command=lambda: self._t1_move_start(0.2, 0.0, 0.0), bg='#16a085', fg='white').pack(side=tk.LEFT, padx=2)
         tk.Button(t1_dir_btn_frame, text="S 后", width=6, height=1,
                  command=lambda: self._t1_move_start(-0.2, 0.0, 0.0), bg='#16a085', fg='white').pack(side=tk.LEFT, padx=2)
+        # A/D 横向移动：实测 vy 正=左、vy 负=右（与 SDK 文档相反），故 A 左用 +vy
         tk.Button(t1_dir_btn_frame, text="A 左", width=6, height=1,
-                 command=lambda: self._t1_move_start(0.0, -0.2, 0.0), bg='#16a085', fg='white').pack(side=tk.LEFT, padx=2)
-        tk.Button(t1_dir_btn_frame, text="D 右", width=6, height=1,
                  command=lambda: self._t1_move_start(0.0, 0.2, 0.0), bg='#16a085', fg='white').pack(side=tk.LEFT, padx=2)
+        tk.Button(t1_dir_btn_frame, text="D 右", width=6, height=1,
+                 command=lambda: self._t1_move_start(0.0, -0.2, 0.0), bg='#16a085', fg='white').pack(side=tk.LEFT, padx=2)
         tk.Button(t1_dir_btn_frame, text="Q 左转", width=6, height=1,
                  command=lambda: self._t1_move_start(0.0, 0.0, 0.5), bg='#16a085', fg='white').pack(side=tk.LEFT, padx=2)
         tk.Button(t1_dir_btn_frame, text="E 右转", width=6, height=1,
@@ -283,7 +296,7 @@ class FactorControlPanel:
         # 键盘绑定
         self._t1_key_map = {
             'w': (0.2, 0.0, 0.0), 's': (-0.2, 0.0, 0.0),
-            'a': (0.0, -0.2, 0.0), 'd': (0.0, 0.2, 0.0),
+            'a': (0.0, 0.2, 0.0), 'd': (0.0, -0.2, 0.0),   # A/D 已按实测方向修正
             'q': (0.0, 0.0, 0.5), 'e': (0.0, 0.0, -0.5),
         }
         for key in self._t1_key_map:
@@ -629,6 +642,7 @@ class FactorControlPanel:
             launch_file = os.path.join(project_root, "launch", "nav24r_full.launch.py")
             cmd = ['bash', '-c', f'export QT_QPA_PLATFORM=xcb && source {ros_setup} && ros2 launch {launch_file} '
                    f'database_path:={db_path} key:={camera_key} localization:=true '
+                   f'use_t1_bridge:=true '
                    f'config_path:={config_path} nav2_params_file:={nav2_params}']
             subprocess.Popen(cmd, shell=False)
             self.set_ros_running(True, "完整导航")
@@ -1014,19 +1028,17 @@ class FactorControlPanel:
     def _init_t1_robot(self):
         """初始化 T1 SDK 连接（不改变机器人模式）。"""
         try:
-            ChannelFactory.Instance().Init(0, 'enx0826ae3beeb8')
+            ChannelFactory.Instance().Init(0, 'enx207bd2d33010')
             self._t1_client = B1LocoClient()
             self._t1_client.Init()
 
             if not self._t1_client.WaitForService(timeout_ms=10000):
                 logger.warning('T1 SDK: WaitForService timeout')
-                self._t1_status_var.set("SDK: 连接超时")
+                self.t1_status_var.set("SDK: 连接超时")
                 return
 
             self._t1_connected = True
             self.t1_status_var.set("SDK: 已连接")
-            self._t1_current_mode = RobotMode.kDamping  # 默认阻尼模式
-            self._t1_update_mode_display()
             self._start_t1_state_subscriber()
             logger.info('T1 SDK 初始化成功')
         except Exception as e:
@@ -1034,7 +1046,7 @@ class FactorControlPanel:
             self.t1_status_var.set(f"SDK: 错误 {str(e)[:30]}")
 
     def _start_t1_state_subscriber(self):
-        """启动 LowState + Odometer subscriber，用于状态显示和模式推断。"""
+        """启动 LowState + Odometer subscriber（保持遥测链路，不做模式推断）。"""
         try:
             # LowState — 电机扭矩 + IMU
             self._t1_low_state_sub = B1LowStateSubscriber(self._on_t1_low_state)
@@ -1043,9 +1055,6 @@ class FactorControlPanel:
             # Odometer — 位姿变化
             self._t1_odo_sub = B1OdometerStateSubscriber(self._on_t1_odometer)
             self._t1_odo_sub.InitChannel()
-
-            # 模式推断定时器 (2 Hz)
-            self._t1_mode_timer = self.root.after(500, self._infer_t1_mode)
         except Exception as e:
             logger.error(f'T1 subscriber 启动失败: {e}')
 
@@ -1071,92 +1080,70 @@ class FactorControlPanel:
         self._t1_latest_odo['y'] = msg.y
         self._t1_latest_odo['theta'] = msg.theta
 
-    def _infer_t1_mode(self):
-        """根据 LowState 电机扭矩 + 里程计变化推断当前模式。"""
-        if not hasattr(self, '_t1_latest_state') or not self._t1_latest_state:
-            self._t1_mode_timer = self.root.after(500, self._infer_t1_mode)
-            return
-
-        state = self._t1_latest_state
-        leg_tau = state.get('leg_tau', 0)
-        motor_count = state.get('motor_count', 0)
-
-        # 里程计是否在变化
-        odo_moving = False
-        if hasattr(self, '_t1_prev_odo'):
-            curr = getattr(self, '_t1_latest_odo', {})
-            if curr:
-                dx = curr.get('x', 0) - self._t1_prev_odo.get('x', 0)
-                dy = curr.get('y', 0) - self._t1_prev_odo.get('y', 0)
-                odo_moving = (dx**2 + dy**2) > 0.001
-        self._t1_prev_odo = getattr(self, '_t1_latest_odo', {}).copy()
-
-        # 模式推断规则 (基于实际测试数据)
-        # Damping:   leg_tau < 1.0, 无运动
-        # Prepare:   leg_tau 0.5~2.0, 无运动, 23个电机在线
-        # Walking:   leg_tau 0.8~1.5, 里程计持续变化
-
-        if motor_count == 0:
-            inferred_mode = RobotMode.kDamping
-            mode_name = 'Damping (无数据)'
-        elif odo_moving and leg_tau > 0.5:
-            inferred_mode = RobotMode.kWalking
-            mode_name = 'Walking'
-        elif leg_tau > 1.5:
-            inferred_mode = RobotMode.kPrepare
-            mode_name = 'Prepare'
-        elif leg_tau >= 0.5:
-            # 中等扭矩可能是 Prepare 后期或 Walking 微调
-            inferred_mode = RobotMode.kPrepare
-            mode_name = 'Prepare'
-        else:
-            inferred_mode = RobotMode.kDamping
-            mode_name = 'Damping'
-
-        if inferred_mode != self._t1_current_mode:
-            self._t1_current_mode = inferred_mode
-            self._t1_update_mode_display()
-            logger.info(f'T1 模式推断: {mode_name} (leg_tau={leg_tau:.2f})')
-
-        self._t1_mode_timer = self.root.after(500, self._infer_t1_mode)
-
     def _t1_update_mode_display(self):
         """更新模式显示和高亮按钮。"""
         if self._t1_current_mode == RobotMode.kWalking:
             self.t1_mode_var.set("模式: Walking")
             self.btn_t1_walking.config(bg='#00ff88', fg='#2b2b2b')
             self.btn_t1_prepare.config(bg='#555555', fg='white')
+            self.btn_t1_damping.config(bg='#c0392b', fg='white')
         elif self._t1_current_mode == RobotMode.kPrepare:
             self.t1_mode_var.set("模式: Prepare")
             self.btn_t1_prepare.config(bg='#00ff88', fg='#2b2b2b')
             self.btn_t1_walking.config(bg='#555555', fg='white')
-        else:
-            self.t1_mode_var.set(f"模式: Damping")
+            self.btn_t1_damping.config(bg='#c0392b', fg='white')
+        elif self._t1_current_mode == RobotMode.kDamping:
+            self.t1_mode_var.set("模式: Damping")
+            self.btn_t1_damping.config(bg='#00ff88', fg='#2b2b2b')
             self.btn_t1_prepare.config(bg='#555555', fg='white')
             self.btn_t1_walking.config(bg='#555555', fg='white')
+        else:
+            self.t1_mode_var.set("模式: 未知")
+            self.btn_t1_prepare.config(bg='#555555', fg='white')
+            self.btn_t1_walking.config(bg='#555555', fg='white')
+            self.btn_t1_damping.config(bg='#c0392b', fg='white')
 
     def _t1_change_mode(self, mode):
-        """切换机器人模式（Prepare / Walking）。"""
+        """切换机器人模式（Prepare / Walking / Damping）。"""
         if not _sdk_available or not self._t1_client:
             messagebox.showwarning("T1 SDK", "SDK 未安装或未初始化")
             return
+        # Damping 模式二次确认：电机直接失去电力，站立中的机器人会瘫倒
+        if mode == RobotMode.kDamping:
+            if not messagebox.askyesno(
+                    "⚠️ 切换到 Damping 模式",
+                    "Damping 模式下机器人所有电机将直接失去电力，\n"
+                    "若机器人正处于站立/行走状态会立即瘫倒！\n\n"
+                    "确认要继续吗？",
+                    icon='warning'):
+                logger.info('用户取消切换到 Damping 模式')
+                return
+        # 用 SendApiRequestFireAndForget 发送模式指令（真 fire-and-forget，不等待响应，不会 502）
+        # 注: ChangeMode()/SendApiRequest() 是同步请求，无 rpc_service_node 时会抛 502（机器人忙碌时更易触发）
         try:
-            self._t1_stop_inner()
-            res = self._t1_client.ChangeMode(mode)
-            if res == 0:
-                self._t1_current_mode = mode
-                self._t1_update_mode_display()
-                mode_name = 'Prepare' if mode == RobotMode.kPrepare else 'Walking'
-                self.status_var.set(f"状态: T1 模式 → {mode_name}")
-                logger.info(f'T1 mode changed to {mode_name}')
-            else:
-                messagebox.showerror("模式切换失败", f"ChangeMode 返回错误码: {res}")
+            # 先连发停止指令并等待，确保机器人停下后再切换模式。
+            # Walking→Prepare 需要机器人先停止步态，否则 Prepare 指令会被忽略（Damping 是断电所以随时有效）
+            for _ in range(6):
+                self._t1_client.MoveCommand(0.0, 0.0, 0.0)
+                time.sleep(0.1)   # 持续 ~0.6s 发停止，给机器人减速时间
+            mode_val = int(mode)   # kDamping=0, kPrepare=1, kWalking=2
+            self._t1_client.SendApiRequestFireAndForget(
+                LocoApiId.kChangeMode, f'{{"mode": {mode_val}}}')
+            self._t1_current_mode = mode
+            self._t1_update_mode_display()
+            mode_name = {
+                RobotMode.kPrepare: 'Prepare',
+                RobotMode.kWalking: 'Walking',
+                RobotMode.kDamping: 'Damping',
+            }.get(mode, str(mode))
+            self.status_var.set(f"状态: T1 模式 → {mode_name}")
+            logger.info(f'T1 mode changed to {mode_name}')
         except Exception as e:
             logger.error(f'T1 ChangeMode error: {e}')
             messagebox.showerror("模式切换错误", str(e))
 
     def _t1_move_start(self, vx, vy, vyaw):
-        """开始手动移动（停止 Nav2 后发送 Move）。"""
+        """开始手动移动（停止 Nav2 后发送 MoveCommand）。"""
         if not _sdk_available or not self._t1_client:
             return
         if self._t1_current_mode != RobotMode.kWalking:
@@ -1166,6 +1153,11 @@ class FactorControlPanel:
         # 如果 Nav2 在运行，先停止
         if self.is_ros_running():
             self.stop_all()
+        # 取消可能仍在进行的停止连发
+        if hasattr(self, '_t1_stop_timer') and self._t1_stop_timer:
+            self.root.after_cancel(self._t1_stop_timer)
+            self._t1_stop_timer = None
+        self._t1_stop_remaining = 0
         self._t1_move_active = True
         self._t1_send_move(vx, vy, vyaw)
         # 20Hz 持续发送
@@ -1179,28 +1171,61 @@ class FactorControlPanel:
         self._t1_move_timer = self.root.after(50, lambda: self._t1_move_repeat(vx, vy, vyaw))
 
     def _t1_send_move(self, vx, vy, vyaw):
-        """发送单次 Move 指令。"""
+        """发送单次移动指令（MoveCommand fire-and-forget，无需 rpc_service_node）。"""
         try:
-            self._t1_client.Move(vx, vy, vyaw)
+            self._t1_client.MoveCommand(vx, vy, vyaw)
         except Exception as e:
-            logger.error(f'T1 Move error: {e}')
+            logger.error(f'T1 MoveCommand error: {e}')
             self._t1_move_active = False
 
+    def _cancel_nav2_goal(self):
+        """取消 Nav2 当前导航目标，防止 Nav2 继续规划/下发速度指令（机器人停不住）。
+
+        注: 用 rclpy ActionClient 取消（`ros2 action cancel` 在 Jazzy 中不存在）。
+        """
+        try:
+            ros_setup = self.app_config['ros']['setup_path']
+            scripts_dir = self.app_config['paths']['scripts_dir']
+            script = os.path.join(scripts_dir, 'cancel_nav2_goal.py')
+            result = subprocess.run(
+                ['bash', '-c', f'source {ros_setup} && python3 {script}'],
+                capture_output=True, text=True, timeout=8)
+            if result.stdout.strip():
+                logger.info(f'Nav2 目标取消: {result.stdout.strip()[:150]}')
+            if result.returncode != 0 and result.stderr.strip():
+                logger.warning(f'Nav2 取消 stderr: {result.stderr.strip()[:150]}')
+        except Exception as e:
+            logger.warning(f'取消 Nav2 目标失败: {e}')
+
     def _t1_stop(self):
-        """停止机器人移动。"""
+        """停止机器人移动（取消 Nav2 目标 + 连发停止指令，确保停得住）。"""
         if not _sdk_available or not self._t1_client:
             return
         self._t1_move_active = False
         if self._t1_move_timer:
             self.root.after_cancel(self._t1_move_timer)
             self._t1_move_timer = None
-        self._t1_stop_inner()
+        # 1. 若 ROS2/Nav2 在运行，先取消导航目标（防止 Nav2 继续下发 cmd_vel）
+        if self.is_ros_running():
+            self._cancel_nav2_goal()
+        # 2. fire-and-forget 可能丢包：20Hz 连发 10 次 (~0.5s) 确保停止送达
+        self._t1_stop_remaining = 10
+        self._t1_stop_tick()
         self.status_var.set("状态: T1 已停止")
+
+    def _t1_stop_tick(self):
+        """以 20Hz 连发停止指令。"""
+        if self._t1_stop_remaining <= 0:
+            return
+        self._t1_send_move(0.0, 0.0, 0.0)
+        self._t1_stop_remaining -= 1
+        if self._t1_stop_remaining > 0:
+            self._t1_stop_timer = self.root.after(50, self._t1_stop_tick)
 
     def _t1_stop_inner(self):
         """内部停止方法（不取消 timer、不更新状态）。"""
         try:
-            self._t1_client.Move(0.0, 0.0, 0.0)
+            self._t1_client.MoveCommand(0.0, 0.0, 0.0)
         except Exception as e:
             logger.error(f'T1 stop error: {e}')
 

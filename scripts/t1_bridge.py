@@ -1,196 +1,178 @@
 #!/usr/bin/env python3
 """
-T1 Bridge Node — Nav2 cmd_vel → 加速进化 T1 SDK
+T1 Bridge — Nav2 cmd_vel → T1 SDK（纯 Python 版，不用 rclpy）
 
-订阅 Nav2 输出的 /cmd_vel，通过 B1LocoClient.Move() 转发给 T1 双足机器人。
-基于 slambAK/boosterxjw/booster_nav2_controller (C++ 验证版) 移植。
+关键设计（2026-08-14 修正）:
+    rclpy（CycloneDDS）与 booster SDK（FastDDS）在同一进程会 Segfault 冲突。
+    因此本节点不 import rclpy，改用 subprocess 运行 `ros2 topic echo` 获取
+    Nav2 的 cmd_vel，解析后通过 Python SDK 的 MoveCommand 转发给机器人。
 
-安全机制:
-    - 模式检查：通过 LowState 电机扭矩推断 kWalking 模式（不依赖 GetMode RPC）
-    - 看门狗：2s 无指令自动停止
-    - SDK 连接断开时日志告警
+    - 不改变机器人模式（无 ChangeMode），模式切换由 factor_control_panel.py 管理
+    - 不检查 Walking 模式（leg_tau 推断不可靠，控制面板负责确保模式正确）
+    - 看门狗：watchdog_timeout 秒无指令自动停车
+    - dry_run：只打印 cmd_vel，不连接 SDK
 
-注意:
-    - 机器人启动序列（Prepare → Walking）由 factor_control_panel.py 管理
-    - 本节点只负责 Nav2 自动导航时的速度转发
+用法:
+    python3 scripts/t1_bridge.py --cmd-vel-topic /cmd_vel_smoothed
+    python3 scripts/t1_bridge.py --dry-run --cmd-vel-topic /cmd_vel_nav
 """
 
+import argparse
+import subprocess
 import threading
 import time
 
-import rclpy
-from rclpy.node import Node
-from geometry_msgs.msg import Twist
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 try:
-    from booster_robotics_sdk_python import B1LocoClient, RobotMode, ChannelFactory, B1LowStateSubscriber
+    from booster_robotics_sdk_python import ChannelFactory, B1LocoClient
+    _SDK_AVAILABLE = True
 except ImportError:
-    print(
-        "ERROR: booster_robotics_sdk_python not found.\n"
-        "Install with: pip install booster_robotics_sdk_python"
-    )
-    exit(1)
+    _SDK_AVAILABLE = False
+
+ROS_SETUP = '/opt/ros/jazzy/setup.bash'
 
 
-class T1Bridge(Node):
-    """Nav2 → T1 SDK 速度指令桥接节点。"""
+class T1Bridge:
+    """纯 Python 的 Nav2 → T1 SDK 桥接（不用 rclpy）。"""
 
-    def __init__(self):
-        super().__init__('t1_bridge')
-
-        # ---- Parameters ----
-        self.declare_parameter('network_interface', 'enx0826ae3beeb8')
-        self.declare_parameter('watchdog_timeout', 2.0)
-        self.declare_parameter('cmd_vel_topic', '/cmd_vel')
-
-        self._watchdog_timeout = self.get_parameter('watchdog_timeout').value
-        cmd_vel_topic = self.get_parameter('cmd_vel_topic').value
-        network_if = self.get_parameter('network_interface').value
-
-        # ---- SDK Init（只做连接，不做模式切换） ----
-        # ChannelFactory 必须先于 B1LocoClient 初始化（对齐 C++ / Python 官方示例）
-        ChannelFactory.Instance().Init(0, network_if)
-
-        self._client = B1LocoClient()
-        self._client.Init()
-
-        if not self._client.WaitForService(timeout_ms=30000):
-            raise RuntimeError('T1 SDK connection timeout!')
-
-        self.get_logger().info(f'T1 SDK connected (interface: {network_if}).')
-
-        # ---- T1 LowState subscriber (模式推断用) ----
-        self._t1_latest_state = {}
-        self._t1_low_state_sub = B1LowStateSubscriber(self._on_t1_low_state)
-        self._t1_low_state_sub.InitChannel()
-
-        # 检查当前机器人模式 (基于 subscriber 数据)
-        self._robot_in_walk = self._check_mode()
+    def __init__(self, network_interface='enx207bd2d33010',
+                 cmd_vel_topic='/cmd_vel_smoothed',
+                 watchdog_timeout=2.0, dry_run=False):
+        self._dry_run = dry_run
+        self._watchdog_timeout = watchdog_timeout
+        self._cmd_vel_topic = cmd_vel_topic
 
         # ---- Thread safety ----
-        self._cmd_lock = threading.Lock()
+        self._lock = threading.Lock()
         self._last_cmd_time = time.time()
         self._is_moving = False
 
-        # ---- Subscription ----
-        self._sub = self.create_subscription(
-            Twist, cmd_vel_topic, self._on_cmd_vel, 10
-        )
+        if not dry_run:
+            if not _SDK_AVAILABLE:
+                raise RuntimeError('booster_robotics_sdk_python 未安装')
+            # ---- SDK 连接（只连接，不切模式）----
+            ChannelFactory.Instance().Init(0, network_interface)
+            self._client = B1LocoClient()
+            self._client.Init()
+            print(f'T1 SDK connected (interface: {network_interface}).', flush=True)
 
-        # ---- Mode check timer (2 Hz) ----
-        self._mode_timer = self.create_timer(0.5, self._check_mode_periodic)
+        # ---- 启动 cmd_vel 读取线程 ----
+        self._reader_thread = threading.Thread(target=self._read_cmd_vel, daemon=True)
+        self._reader_thread.start()
 
-        # ---- Watchdog timer (2 Hz) ----
-        self._watchdog_timer = self.create_timer(0.5, self._watchdog)
+        # ---- 看门狗线程 ----
+        self._watchdog_thread = threading.Thread(target=self._watchdog_loop, daemon=True)
+        self._watchdog_thread.start()
 
-        mode_str = 'kWalking' if self._robot_in_walk else 'NOT kWalking'
-        self.get_logger().info(
-            f'T1 Bridge ready. Listening on {cmd_vel_topic}, robot mode: {mode_str}'
-        )
-
-    # ------------------------------------------------------------------ #
-    # Mode check (subscriber-based, no GetMode RPC needed)                #
-    # ------------------------------------------------------------------ #
-    def _check_mode(self) -> bool:
-        """根据 LowState 电机扭矩推断是否在 kWalking 模式。"""
-        if not hasattr(self, '_t1_latest_state') or not self._t1_latest_state:
-            return self._robot_in_walk  # 无数据时保持原状态
-
-        state = self._t1_latest_state
-        leg_tau = state.get('leg_tau', 0)
-        motor_count = state.get('motor_count', 0)
-
-        # 简单推断: 有里程计变化 + 腿部有扭矩 = Walking
-        # (t1_bridge 本身不订阅 odometer，用扭矩阈值判断)
-        # Damping: leg_tau < 1.0
-        # Prepare/Walking: leg_tau > 0.5
-        # 保守策略: 扭矩 > 0.5 且电机在线 = 认为是 Walking
-        is_walk = (motor_count > 0 and leg_tau > 0.5)
-
-        if self._robot_in_walk and not is_walk:
-            self.get_logger().warn(
-                f'Robot may have left Walking mode (leg_tau={leg_tau:.2f})'
-            )
-
-        return is_walk
-
-    def _check_mode_periodic(self):
-        """周期性检查机器人是否还在 kWalking 模式。"""
-        was_walk = self._robot_in_walk
-        self._robot_in_walk = self._check_mode()
-        if was_walk and not self._robot_in_walk:
-            self.get_logger().warn(
-                'Robot left kWalking mode! Stopping cmd_vel forwarding.'
-            )
-
-    def _on_t1_low_state(self, msg):
-        """LowState subscriber 回调 — 缓存电机数据用于模式推断。"""
-        if not hasattr(self, '_t1_latest_state'):
-            self._t1_latest_state = {}
-        self._t1_latest_state['motor_count'] = len(msg.motor_state_parallel)
-        if msg.motor_state_parallel:
-            leg_tau = sum(abs(m.tau_est) for m in msg.motor_state_parallel[3:8])
-            self._t1_latest_state['leg_tau'] = leg_tau
+        mode_str = 'DRY-RUN' if dry_run else '转发中'
+        print(f'T1 Bridge ready ({mode_str}). 订阅 {cmd_vel_topic}', flush=True)
 
     # ------------------------------------------------------------------ #
-    # Callbacks                                                            #
+    # cmd_vel 读取（subprocess ros2 topic echo）                          #
     # ------------------------------------------------------------------ #
-    def _on_cmd_vel(self, msg: Twist):
-        """收到 Nav2 的速度指令，仅在 kWalking 模式下转发。"""
-        if not self._robot_in_walk:
-            self.get_logger().warn(
-                'Robot not in kWalking mode, ignoring cmd_vel. '
-                'Use the control panel to switch to Walking first.'
-            )
-            return
+    def _read_cmd_vel(self):
+        """用 ros2 topic echo 订阅 cmd_vel，解析 YAML 并转发。"""
+        # ROS_DOMAIN_ID=42：与 Nav2 同 domain（隔离机器人 FastDDS domain 0）
+        cmd = (f'source {ROS_SETUP} && '
+               f'export ROS_DOMAIN_ID=42 && '
+               f'ros2 topic echo {self._cmd_vel_topic} --once')
+        # --once 每次只读一条，循环读取；单条读完即退出，避免长连接崩溃后无法恢复
+        while True:
+            try:
+                proc = subprocess.Popen(
+                    ['bash', '-c', cmd],
+                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+                out, _ = proc.communicate(timeout=30)
+                if out.strip():
+                    self._parse_and_send(out)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            except Exception as e:
+                print(f'[WARN] cmd_vel 读取异常: {e}', flush=True)
+                time.sleep(0.5)
 
-        vx = float(msg.linear.x)
-        vy = float(msg.linear.y)
-        vyaw = float(msg.angular.z)
-
-        # 直接转发，不做节流（Nav2 controller 已限速 ~20Hz）
-        with self._cmd_lock:
-            self._last_cmd_time = time.time()
-            self._is_moving = True
-            self._client.Move(vx, vy, vyaw)
-
-    def _watchdog(self):
-        """超时未收到 cmd_vel 时自动停车。"""
-        with self._cmd_lock:
-            if not self._is_moving:
+    def _parse_and_send(self, text: str):
+        """解析 ros2 topic echo 的 YAML 输出，提取 vx/vy/vyaw 并转发。"""
+        vx = vy = vyaw = 0.0
+        if yaml is not None:
+            try:
+                # 去掉 --- 分隔符（ros2 topic echo 用 --- 分隔多条消息）
+                data = yaml.safe_load(text.replace('---', ''))
+                vx = float(data['linear']['x'])
+                vy = float(data['linear']['y'])
+                vyaw = float(data['angular']['z'])
+            except Exception:
                 return
-            elapsed = time.time() - self._last_cmd_time
+        else:
+            import re
+            m = re.search(r'x:\s*([-\d.eE+]+)', text)
+            vx = float(m.group(1)) if m else 0.0
+            m = re.search(r'y:\s*([-\d.eE+]+)', text)
+            vy = float(m.group(1)) if m else 0.0
+            m = re.search(r'angular:\s*\n\s*x:[^\n]*\n\s*y:[^\n]*\n\s*z:\s*([-\d.eE+]+)', text)
+            vyaw = float(m.group(1)) if m else 0.0
 
-        if elapsed > self._watchdog_timeout:
-            self.get_logger().info(f'No cmd_vel for {elapsed:.1f}s, stopping robot.')
-            self._client.Move(0.0, 0.0, 0.0)
-            with self._cmd_lock:
-                self._is_moving = False
+        self._send(vx, vy, vyaw)
 
     # ------------------------------------------------------------------ #
-    # Shutdown                                                             #
+    # 转发                                                                #
     # ------------------------------------------------------------------ #
-    def shutdown(self):
-        """节点退出时停止机器人。"""
-        self.get_logger().info('Shutting down: stopping robot ...')
-        try:
-            self._client.Move(0.0, 0.0, 0.0)
-            self.get_logger().info('Robot stopped. Shutdown complete.')
-        except Exception as e:
-            self.get_logger().error(f'Error during shutdown: {e}')
+    def _send(self, vx, vy, vyaw):
+        if self._dry_run:
+            print(f'[DRY-RUN] cmd_vel: vx={vx:+.3f} vy={vy:+.3f} vyaw={vyaw:+.3f}', flush=True)
+        else:
+            with self._lock:
+                self._last_cmd_time = time.time()
+                self._is_moving = True
+            try:
+                self._client.MoveCommand(vx, vy, vyaw)
+            except Exception as e:
+                print(f'[ERROR] MoveCommand 失败: {e}', flush=True)
+
+    def _watchdog_loop(self):
+        """看门狗：超时无指令自动停车。"""
+        while True:
+            time.sleep(0.5)
+            with self._lock:
+                if not self._is_moving:
+                    continue
+                elapsed = time.time() - self._last_cmd_time
+            if elapsed > self._watchdog_timeout:
+                if self._dry_run:
+                    print(f'[DRY-RUN] watchdog: {elapsed:.1f}s 无指令，将停止', flush=True)
+                else:
+                    print(f'{elapsed:.1f}s 无指令，停止机器人', flush=True)
+                    try:
+                        self._client.MoveCommand(0.0, 0.0, 0.0)
+                    except Exception as e:
+                        print(f'[ERROR] 停止失败: {e}', flush=True)
+                with self._lock:
+                    self._is_moving = False
 
 
-def main(args=None):
-    rclpy.init(args=args)
-    node = T1Bridge()
+def main():
+    parser = argparse.ArgumentParser(description='T1 Bridge (纯 Python)')
+    parser.add_argument('--network-interface', default='enx207bd2d33010')
+    parser.add_argument('--cmd-vel-topic', default='/cmd_vel_smoothed')
+    parser.add_argument('--watchdog-timeout', type=float, default=2.0)
+    parser.add_argument('--dry-run', action='store_true')
+    args = parser.parse_args()
+
+    T1Bridge(
+        network_interface=args.network_interface,
+        cmd_vel_topic=args.cmd_vel_topic,
+        watchdog_timeout=args.watchdog_timeout,
+        dry_run=args.dry_run,
+    )
     try:
-        rclpy.spin(node)
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
-        pass
-    finally:
-        node.shutdown()
-        node.destroy_node()
-        rclpy.shutdown()
+        print('\nT1 Bridge 退出', flush=True)
 
 
 if __name__ == '__main__':

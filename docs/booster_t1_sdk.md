@@ -66,14 +66,16 @@ client.WaitForService(timeout_ms=5000)  # 等待机器人 DDS 服务发现
 
 | 方法 | 签名 | 返回值 | 说明 |
 |------|------|--------|------|
-| `Move` | `Move(vx, vy, vyaw)` | `int32_t` | vx/vy 单位 m/s, vyaw 单位 rad/s |
-| `MoveCommand` | `MoveCommand(vx, vy, vyaw)` | `int32_t` | Fire-and-forget 版本 |
+| `Move` | `Move(vx, vy, vyaw)` | `int32_t` | vx/vy 单位 m/s, vyaw 单位 rad/s。**同步请求**，无 `rpc_service_node` 时抛 `RuntimeError 502` |
+| `MoveCommand` | `MoveCommand(vx, vy, vyaw)` | `None` | Fire-and-forget 版本，**无需 `rpc_service_node`**。纯 Python SDK 方案一律用这个 |
+
+> ⚠️ **实测结论（2026-08-14）**：`Move()` 是同步请求（等待响应），机器人板载 `rpc_service_node` 未启动时返回 502；`MoveCommand()` / `ChangeMode()` 是 fire-and-forget，成功返回 `None`。nav24r 的控制面板与 `t1_bridge.py` 均改用 `MoveCommand`。
 
 #### 模式控制
 
 | 方法 | 签名 | 返回值 | 说明 |
 |------|------|--------|------|
-| `ChangeMode` | `ChangeMode(mode: RobotMode)` | `int32_t` | 切换机器人模式 |
+| `ChangeMode` | `ChangeMode(mode: RobotMode)` | `None`/异常 | 切换机器人模式。⚠️ 同步请求，无 `rpc_service_node` 时会抛 502（机器人忙碌时更易触发）。**推荐改用 `SendApiRequestFireAndForget(LocoApiId.kChangeMode, '{"mode":N}')`**（返回 0，不等待响应） |
 | `GetMode` | `GetMode(response: GetModeResponse)` | `int32_t` | 查询当前模式 |
 | `GetStatus` | `GetStatus(response: GetStatusResponse)` | `int32_t` | 查询完整状态 |
 
@@ -495,5 +497,6 @@ if res != 0:
 
 - `kDamping` 模式下机器人所有电机进入阻尼模式，机器人会摔倒——**仅用于紧急停止或维护**
 - `Move()` 仅在 `kWalking` 模式下有效
+- `Move()` 是同步请求，无 `rpc_service_node` 时返回 502 —— 纯 Python SDK 方案请用 `MoveCommand()`
 - `kPrepare` 模式机器人保持站立，可以安全切换到 `kWalking`
-- `MoveCommand()` 是 fire-and-forget，不保证送达；`Move()` 是同步请求，有响应确认
+- `MoveCommand()` / `ChangeMode()` 是 fire-and-forget，成功返回 `None`，不保证送达；`Move()` 有响应确认

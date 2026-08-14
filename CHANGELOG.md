@@ -1,5 +1,103 @@
 # 变更日志
 
+## [v2.7.4] - 2026-08-14 - domain 隔离 + velocity_smoother 激活修复 + 真机走步验证
+
+### 🔧 真机走步验证通过
+- ✅ **机器人实际走步 0.2m 成功，全程无 damping**（MoveCommand 步态控制正常）
+
+### 🌐 domain 隔离（根治 FastDDS/CycloneDDS 冲突）
+- ✅ 电脑侧 ROS2（Nav2/CycloneDDS）统一 `ROS_DOMAIN_ID=42`，与机器人 FastDDS(domain 0) 隔离
+- ✅ 影响文件：`launch/nav24r_full.launch.py`、`t1_bridge.py`、`factor_control_panel.py`、`cancel_nav2_goal.py`、`test_nav2_goal.py`
+- ✅ 解决：type hash 警告刷屏、bt_navigator 启动失败(follow_path 超时)、SDK 连接被干扰导致 damping
+
+### 🔧 velocity_smoother 激活修复
+- ✅ **`velocity_smoother` 加入 lifecycle_manager node_names**（此前未激活 → /cmd_vel_smoothed 无输出 → 机器人不动）
+- ✅ 数据流完整：controller → /cmd_vel → smoother(激活) → /cmd_vel_smoothed → t1_bridge → MoveCommand
+
+### 📋 其他
+- ✅ `t1_bridge.py` 纯 Python 化（不用 rclpy，subprocess ros2 topic echo 获取 cmd_vel）
+- ✅ 控制面板 T1 停止按钮可切断 Nav2 规划（`cancel_nav2_goal.py` 抢占目标）
+
+---
+
+## [v2.7.3] - 2026-08-14 - t1_bridge 纯 Python 化（修复真机 Segfault / damping）
+
+- ✅ **根因**：t1_bridge 之前同时 `import rclpy`（CycloneDDS）+ booster SDK（FastDDS），两套 DDS 在同一进程冲突导致 Segfault，机器人侧检测到控制客户端异常断开而切 damping
+- ✅ **t1_bridge 纯 Python 化**：不再 `import rclpy`，改用 `subprocess ros2 topic echo` 获取 cmd_vel，解析 YAML 后通过 SDK `MoveCommand` 转发（与控制面板同为纯 Python + SDK，无 DDS 冲突）
+- ✅ 去掉 leg_tau 模式推断（不可靠，控制面板负责模式）
+- ✅ launch 里 t1_bridge 从 `Node` 改为 `ExecuteProcess`（纯 Python 脚本用命令行参数）
+- ✅ 修复 YAML 解析（`ros2 topic echo` 的 `---` 分隔符导致解析失败）
+- ✅ 端到端验证通过：发布 cmd_vel → t1_bridge 正确接收并转发
+
+---
+
+## [v2.7.2] - 2026-08-14 - 停止按钮切断 Nav2 规划
+
+- ✅ **T1 停止按钮现在会取消 Nav2 导航目标**：先抢占 Nav2 目标（发"原地目标"），再连发停止指令，防止 Nav2 继续下发 cmd_vel 导致机器人停不住
+- ✅ 新增 `scripts/cancel_nav2_goal.py`：用 rclpy ActionClient 读取当前位姿并发"原地目标"抢占（`ros2 action cancel` 在 Jazzy 不存在；rclpy cancel API 有 bug，改用抢占）
+- ✅ **mock 实测通过**：导航中执行抢占 → 旧目标 ABORTED → cmd_vel 归零 → 机器人停止
+
+---
+
+## [v2.7.1] - 2026-08-14 - Mock 导航链路实测通过
+
+- ✅ **mock 环境改用 RPP 控制器**（`config/nav2_params_mock.yaml`），实测导航目标 SUCCEEDED
+- ✅ **参数文件分工**：mock → RPP（轻量可靠）；实机 → MPPI DiffDrive（`nav2_params.yaml`，待实机调参）
+- ✅ **t1_bridge dry-run 模式**：`-p dry_run:=true` 只记录 cmd_vel，不连接/驱动机器人
+- ✅ 修复 `PathFollowCritic offset_from_furthest` 过大导致短路径无前进驱动力的问题（40→6）
+
+> MPPI 在 mock 环境控制环仅 ~5.5Hz 且输出近零（非算力问题，疑 mock costmap/TF 同步限制），故 mock 验证用 RPP；MPPI 留待实机调优。
+
+---
+
+## [v2.7.0] - 2026-08-14 - Nav2 人形机器人导航适配
+
+### 🤖 人形适配（基于公开最佳实践调研）
+- ✅ **MPPI 运动模型 Omni → DiffDrive**：人形无横移，Omni 生成无法执行的轨迹（vy_std 归 0）
+- ✅ **补全 MPPI critic**（5 个新增）：ConstraintCritic / PathFollowCritic / GoalAngleCritic / PathAngleCritic / PreferForwardCritic
+- ✅ **全局规划器 NavFn → SmacPlannerHybrid**（Hybrid A*）：考虑非完整约束，生成人形可跟随的平滑弧线
+- ✅ **启用 velocity_smoother**：controller → /cmd_vel → smoother → /cmd_vel_smoothed → t1_bridge，平滑加减速防前倾
+- ✅ **调参**：wz_max 0.5→0.4（双足转向受限）、inflation 0.6→0.7（更大障碍余量）、prune_distance 1.0→1.5
+
+### 🔧 相关文件
+- ✅ `config/nav2_params.yaml`：MPPI/规划器/代价地图/velocity_smoother 人形调优
+- ✅ `launch/nav24r_full.launch.py`：新增 velocity_smoother 节点，t1_bridge 订阅 /cmd_vel_smoothed
+- ✅ `scripts/test_nav2_goal.py`：默认观察 /cmd_vel_smoothed（可 --cmd-vel-topic 指定）
+
+### 📚 文档
+- ✅ `README.md` / `docs/t1_bridge_status.md`：数据流更新（加入 velocity_smoother）
+- ✅ 规划详见 `~/.claude/plans/steady-wobbling-mccarthy.md`
+
+---
+
+## [v2.6.0] - 2026-08-14 - 控制面板 T1 实测修复 + 纯 Python SDK 方案定型
+
+### 🔧 面板实测修复（有实机验证）
+- ✅ **模式改为"开关"模型**：模式完全由按钮决定，**移除 leg_tau 自动推断**
+  - 实测 leg_tau 站立时波动极大（0.06~2.05Nm，26% 采样 <0.5），无法可靠区分 Prepare/Damping，导致模式不停跳变
+- ✅ **模式切换改用真 fire-and-forget**：`SendApiRequestFireAndForget(kChangeMode, '{"mode":N}')`
+  - 修复：`ChangeMode()`/`SendApiRequest()` 同步请求无 rpc_service_node 时抛 502（机器人忙碌/行走时更易触发）
+- ✅ **切换模式前先停止**：先连发 MoveCommand(0) ~0.6s 再发模式指令
+  - 修复：Walking→Prepare 需机器人先停止步态，否则 Prepare 指令被忽略（Damping 断电随时有效）
+- ✅ **停止连发**：`_t1_stop` 20Hz 连发 10 次停止指令（fire-and-forget 可能丢包）
+  - 修复：松手后机器人继续行走 / 停止按钮无效
+- ✅ **A/D 左右修正**：实测 vy 正=左、vy 负=右（与 SDK 文档相反），A=左(+vy)、D=右(-vy)
+- ✅ **Damping 二次确认弹窗**：警告"电机将直接失去电力，站立中的机器人会瘫倒"
+- ✅ **订阅器导入修复**：补上 `B1LowStateSubscriber`/`B1OdometerStateSubscriber` 导入（此前缺失导致状态订阅从未启动）
+- ✅ `_t1_status_var` 笔误修复（`self._t1_status_var` → `self.t1_status_var`）
+
+### 📋 实测结论（2026-08-14，机器人 LAN 直连）
+- 面板可正常：Prepare/Walking/Damping 切换、WASD/QE 移动、松手停止
+- 机器人空闲（Prepare）时 ChangeMode/MoveCommand 稳定返回 None；行走中同步请求会 502
+- 网络：LAN `192.168.10.103/24` ↔ 机器人 `192.168.10.102`（eth0），以太网 0 错误
+
+### 📚 文档
+- ✅ `docs/t1_bridge_status.md`：模式控制改为开关模型、fire-and-forget 用法
+- ✅ `docs/booster_t1_sdk.md`：ChangeMode/Move 502 说明 + MoveCommand 推荐
+- ✅ `README.md` / `CLAUDE.md`：T1 控制按钮、Damping 确认、面板描述
+
+---
+
 ## [v2.5.0] - 2026-08-13 - Python SDK 验证 + LAN 直连
 
 ### 🆕 新功能
@@ -12,10 +110,10 @@
 - ✅ 控制面板 T1 方向键映射修正（W/S=前后, A/D=左右, Q/E=转向）
 
 ### 🔧 改动
-- ✅ 网络接口统一为 LAN 直连 `enx0826ae3beeb8`（废弃 WiFi 跳板）
-- ✅ `t1_bridge.py` 默认 network_interface → `enx0826ae3beeb8`
-- ✅ `nav24r_full.launch.py` 默认 t1_network_interface → `enx0826ae3beeb8`
-- ✅ `factor_control_panel.py` T1 初始化接口 → `enx0826ae3beeb8`
+- ✅ 网络接口统一为 LAN 直连 `enx207bd2d33010`（废弃 WiFi 跳板）
+- ✅ `t1_bridge.py` 默认 network_interface → `enx207bd2d33010`
+- ✅ `nav24r_full.launch.py` 默认 t1_network_interface → `enx207bd2d33010`
+- ✅ `factor_control_panel.py` T1 初始化接口 → `enx207bd2d33010`
 - ✅ A/D 键 vy 符号修正：A=左(vy负), D=右(vy正)，与机器人实际移动方向一致
 - ✅ 模式检测改用 subscriber 推断（B1LowStateSubscriber 电机扭矩），不再依赖 GetMode RPC
 - ✅ `t1_bridge.py` 添加 B1LowStateSubscriber 用于 Walking 模式检测
@@ -37,11 +135,12 @@
 
 ### 🆕 新功能
 - ✅ `scripts/t1_bridge.py`：Nav2 → T1 SDK 速度桥接节点
-  - 订阅 `/cmd_vel_nav`，调用 `B1LocoClient.Move(vx, 0.0, vyaw)`
-  - 500ms 看门狗自动停车，`_is_stopping` 标志位防重复触发
-  - 指令节流 ≤20Hz，速度变化 >0.05 时立即转发
+  - 订阅 `/cmd_vel`，调用 `B1LocoClient.MoveCommand(vx, vy, vyaw)`
+  - 看门狗 `watchdog_timeout=2.0s` 无指令自动停车
+  - 指令直接转发（Nav2 controller 已限速 ~20Hz），不做额外节流
+  - 模式保护：仅 kWalking 模式转发（B1LowStateSubscriber 扭矩推断）
   - SDK 连接超时优雅关闭（`raise RuntimeError` → `finally`）
-  - 退出时自动切换 Damping 模式
+  - 退出时发送停止指令 `MoveCommand(0,0,0)`
 - ✅ `launch/nav24r_full.launch.py`：新增 `use_t1_bridge` / `t1_network_interface` 参数
 - ✅ `setup.py`：注册 `t1_bridge` console_scripts 入口
 - ✅ `docs/t1_bridge_status.md`：T1 Bridge 设计文档与旧代码对比

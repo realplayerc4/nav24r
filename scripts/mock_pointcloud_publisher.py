@@ -20,7 +20,6 @@ class MockPointCloudPublisher(Node):
         self.declare_parameter('pointcloud_topic', '/factor_perception/cloud_obstacles')
         self.declare_parameter('publish_rate', 10.0)
         self.declare_parameter('frame_id', 'base_link')
-        self.declare_parameter('use_sim_time', False)
         
         pointcloud_topic = str(self.get_parameter('pointcloud_topic').value)
         publish_rate = float(self.get_parameter('publish_rate').value)

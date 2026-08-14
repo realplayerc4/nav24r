@@ -2,7 +2,7 @@
 # 人形机器人导航系统
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction, SetEnvironmentVariable, ExecuteProcess
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution, PythonExpression, EnvironmentVariable, TextSubstitution
 from launch_ros.actions import ComposableNodeContainer, Node
@@ -77,7 +77,7 @@ def generate_launch_description():
     # T1 Bridge 参数
     use_t1_bridge_arg = DeclareLaunchArgument('use_t1_bridge', default_value='false',
         description='Enable T1 robot bridge (Nav2 cmd_vel → T1 SDK)')
-    t1_network_if_arg = DeclareLaunchArgument('t1_network_interface', default_value='enx0826ae3beeb8',
+    t1_network_if_arg = DeclareLaunchArgument('t1_network_interface', default_value='enx207bd2d33010',
         description='T1 SDK network interface (e.g. eth0)')
 
     # ============ Factor Perception ============
@@ -206,6 +206,16 @@ def generate_launch_description():
         parameters=[LaunchConfiguration('nav2_params_file')],
     )
 
+    # 速度平滑器：controller 输出 /cmd_vel → smoother → /cmd_vel_smoothed → t1_bridge
+    # 人形机器人不能急启急停，平滑加减速（防前倾）
+    nav2_velocity_smoother = Node(
+        package='nav2_velocity_smoother',
+        executable='velocity_smoother',
+        name='velocity_smoother',
+        ros_arguments=['--log-level', 'warn'],
+        parameters=[LaunchConfiguration('nav2_params_file')],
+    )
+
     nav2_smoother = Node(
         package='nav2_smoother',
         executable='smoother_server',
@@ -265,29 +275,29 @@ def generate_launch_description():
                 'behavior_server',
                 'bt_navigator',
                 'waypoint_follower',
+                'velocity_smoother',
             ]},
         ],
     )
 
     # ============ T1 Bridge ============
-    # Nav2 cmd_vel → 加速进化 T1 SDK (B1LocoClient.Move)
-    t1_bridge = Node(
-        package='nav24r',
-        executable='t1_bridge',
-        name='t1_bridge',
+    # Nav2 cmd_vel → 加速进化 T1 SDK（纯 Python，不用 rclpy，避免 CycloneDDS 与 FastDDS 冲突）
+    t1_bridge = ExecuteProcess(
+        cmd=['python3',
+             '/home/yq/nav24r/scripts/t1_bridge.py',
+             '--network-interface', LaunchConfiguration('t1_network_interface'),
+             '--cmd-vel-topic', '/cmd_vel_smoothed',
+             '--watchdog-timeout', '2.0'],
         output='screen',
         condition=IfCondition(LaunchConfiguration('use_t1_bridge')),
-        parameters=[{
-            'network_interface': LaunchConfiguration('t1_network_interface'),
-            'watchdog_timeout': 2.0,
-            'cmd_vel_topic': '/cmd_vel',
-        }],
     )
 
     # ============ 返回 LaunchDescription ============
 
     return LaunchDescription([
         SetEnvironmentVariable('QT_QPA_PLATFORM', 'xcb'),  # Wayland 兼容 Qt
+        # 隔离 domain：Nav2(CycloneDDS) 用 42，避免与机器人 FastDDS(domain 0) 冲突
+        SetEnvironmentVariable('ROS_DOMAIN_ID', '42'),
         # Factor Perception 参数
         camera_model_arg,
         mxid_or_name_arg,
@@ -322,6 +332,7 @@ def generate_launch_description():
         factor_perception_container,
         rtabmap_viz,
         nav2_controller,
+        nav2_velocity_smoother,
         nav2_smoother,
         nav2_planner,
         nav2_route,

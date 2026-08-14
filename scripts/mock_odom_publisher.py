@@ -18,7 +18,6 @@ class MockOdomPublisher(Node):
         # 参数
         self.declare_parameter('odom_topic', '/factor_perception/odom')
         self.declare_parameter('publish_rate', 30.0)
-        self.declare_parameter('use_sim_time', False)
         
         odom_topic = str(self.get_parameter('odom_topic').value)
         publish_rate = float(self.get_parameter('publish_rate').value)

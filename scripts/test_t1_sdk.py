@@ -3,11 +3,11 @@
 T1 SDK 最小连通性测试 — 独立于 ROS2，只测 SDK 链路
 
 步骤:
-    1. ChannelFactory.Init(domain_id, enx0826ae3beeb8)
+    1. ChannelFactory.Init(domain_id, enx207bd2d33010)
     2. B1LocoClient.Init()
     3. WaitForService(timeout_ms=15000)
-    4. GetMode() → 打印当前机器人模式
-    5. (可选) Move(0.1, 0, 0) → 慢走 0.1 m/s，2 秒后停止
+    4. GetMode() → 打印当前机器人模式（无 rpc_service_node 时会 502，属正常）
+    5. (可选) MoveCommand(0.1, 0, 0) → 慢走 0.1 m/s，2 秒后停止
 
 用法:
     python3 scripts/test_t1_sdk.py                  # 只测连接 + GetMode
@@ -30,7 +30,7 @@ except ImportError:
     sys.exit(1)
 
 ROBOT_IP = "192.168.10.102"
-NET_IF = "enx0826ae3beeb8"
+NET_IF = "enx207bd2d33010"
 DOMAIN_ID = 0
 SDK_TIMEOUT_MS = 15000
 
@@ -81,23 +81,24 @@ def test_get_mode(client: B1LocoClient) -> RobotMode | None:
 
 
 def test_move(client: B1LocoClient, duration: float = 2.0) -> None:
-    """Move — 慢走测试 (vx=0.1 m/s)."""
-    print(f"  Move 测试: vx=0.1 m/s, 持续 {duration}s")
+    """MoveCommand — 慢走测试 (vx=0.1 m/s, fire-and-forget, 成功返回 None)."""
+    print(f"  MoveCommand 测试: vx=0.1 m/s, 持续 {duration}s")
     print(f"  ⚠️  确保机器人周围无障碍物!")
 
-    res = client.Move(0.1, 0.0, 0.0)
-    if res == 0:
-        ok("Move(0.1, 0, 0) 指令发送成功")
+    # 用 MoveCommand（fire-and-forget），无 rpc_service_node 时 Move() 会 502
+    res = client.MoveCommand(0.1, 0.0, 0.0)
+    if res is None or res == 0:
+        ok("MoveCommand(0.1, 0, 0) 指令发送成功")
     else:
-        fail(f"Move 失败 — 错误码: {res}")
+        fail(f"MoveCommand 失败 — 错误码: {res}")
         return
 
     print(f"  等待 {duration}s ...")
     time.sleep(duration)
 
-    print(f"  发送停止指令 Move(0, 0, 0)")
-    res = client.Move(0.0, 0.0, 0.0)
-    if res == 0:
+    print(f"  发送停止指令 MoveCommand(0, 0, 0)")
+    res = client.MoveCommand(0.0, 0.0, 0.0)
+    if res is None or res == 0:
         ok("停止指令发送成功")
     else:
         fail(f"停止指令失败 — 错误码: {res}")

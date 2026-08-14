@@ -13,7 +13,7 @@ CLAUDE.md - nav24r 项目特定指南
 ## 项目概述
 
 **名称：** nav24r（人形机器人自主导航系统）
-**版本：** 2.3.0
+**版本：** 2.7.4
 **技术栈：** ROS 2 Jazzy + Python 3.12 + Factor Perception SDK + RTAB-Map + Nav2
 **构建系统：** ament_python
 **许可证：** MIT
@@ -85,7 +85,9 @@ nav24r/
 ├── README.md / CHANGELOG.md / CLAUDE.md
 │
 ├── config/                            # 配置文件
-│   ├── nav2_params.yaml              # Nav2 参数（高度过滤 0.2~1.4m）
+│   ├── nav2_params.yaml              # 真机 Nav2 参数（RPP 控制器，高度过滤 0.2~1.4m）
+│   ├── nav2_params_mock.yaml         # mock 环境参数（RPP，与真机分离）
+│   ├── nav2_params_mppi_backup.yaml  # MPPI 配置备份（可切回）
 │   ├── factor_perception_config.yaml # 感知 SDK 配置
 │   ├── rtabmap.ini                   # RTAB-Map 参数（SDK 自带）
 │   ├── cyclonedds.xml                # Cyclone DDS 优化
@@ -100,7 +102,9 @@ nav24r/
 │   ├── nav24r_full.launch.py         # 完整系统（感知+SLAM+Nav2）
 │   ├── factor_perception_isolated.launch.py  # 隔离架构
 │   ├── nav2.launch.py                # 纯 Nav2
+│   ├── mock_nav.launch.py            # 🧪 Mock 导航环境（地图+差分模拟器+Nav2）
 │   └── simulation/                   # 仿真启动文件
+│       └── simulation_nav2.launch.py #   模拟感知数据 + Nav2
 │
 ├── scripts/                           # 工具脚本
 │   ├── factor_control_panel.py       # ⭐ 主入口：GUI 控制面板
@@ -116,9 +120,14 @@ nav24r/
 │   ├── ply_to_pointcloud.py          # PLY点云转ROS2 PointCloud2
 │   ├── mock_odom_publisher.py        # 仿真里程计
 │   ├── mock_pointcloud_publisher.py  # 仿真点云
-│   ├── t1_bridge.py                 # Nav2 → T1 速度桥接节点
+│   ├── mock_map_publisher.py         # 空白地图发布器（global_costmap 用）
+│   ├── mock_robot.py                 # 差分驱动模拟器（cmd_vel → odom+TF）
+│   ├── generate_test_map.py          # 生成测试地图 YAML
+│   ├── t1_bridge.py                 # Nav2 → T1 速度桥接节点（纯 Python，subprocess 取 cmd_vel）
+│   ├── cancel_nav2_goal.py          # 停止 Nav2 导航（抢占目标，停止按钮调用）
 │   ├── mock_trajectory_publisher.py # Mock 轨迹测试 (t1_bridge → SDK)
-│   ├── test_nav2_goal.py                 # Nav2 目标导航测试
+│   ├── test_nav2_goal.py             # Nav2 输出观察器（验证 cmd_vel）
+│   ├── test_t1_sdk.py               # T1 SDK 连通性测试
 │   ├── test_runner.sh / test_simulation.py  # 测试框架
 │   └── test_phase*.sh               # 分阶段测试脚本
 │
@@ -157,12 +166,15 @@ nav24r/
 
 ```
 nav24r 电脑 (192.168.10.103) ──LAN 直连── Robot eth0 (192.168.10.102)
-                                       │
-                                    FastDDS (domain 0)
-                                    T1 SDK DDS + ROS2 Humble
+    │                                    │
+    │ 电脑侧 ROS2: ROS_DOMAIN_ID=42       │
+    │ Nav2/CycloneDDS (隔离，避免冲突)     │
+    │                                    FastDDS (domain 0)
+    │                                    T1 SDK DDS + ROS2 Humble
 ```
 
-- 统一接口：`enx0826ae3beeb8`（USB LAN）
+- 统一接口：`enx207bd2d33010`（USB LAN）
+- **domain 隔离**：电脑侧 ROS2 用 `ROS_DOMAIN_ID=42`，机器人 FastDDS 用 domain 0，避免 DDS 冲突（type hash 刷屏、bt_navigator 失败、SDK 干扰 damping）
 - 机器人 IP：`192.168.10.102`
 - WiFi (`192.168.0.x`) 不使用
 
@@ -186,10 +198,10 @@ python3 scripts/factor_control_panel.py
 | 🔄 续建 | 建图 | 加载已有数据库继续建图 |
 | 🧭 开始定位 | 定位 | 加载已有地图进入 localization 模式 |
 | 🚀 完整导航 | 导航 | Factor Perception + RTAB-Map + Nav2 全栈 |
+| 🤖 T1 控制 | 机器人 | 模式切换（Prepare/Walking/Damping，Damping 有二次确认）+ 方向键手动操控 |
 | 🗑️ 重置地图 | 清理 | 删除数据库（受保护开关约束） |
 | ⏹️ 停止 | 停止 | 停止所有 ROS 节点 |
 | 📊 RViz / RViz 3D | 可视化 | 2D 顶视角 / 3D 视角 |
-| 🗺️ 地图观察 | 可视化 | 启动地图观察器 |
 | 📁 数据库 | 工具 | rtabmap-databaseViewer |
 | 📊 地图质量 | 分析 | 地图质量评分报告 |
 | 🗺️ 导出Octomap | 导出 | 启动 Database Viewer 导出 Octomap |
@@ -200,7 +212,7 @@ python3 scripts/factor_control_panel.py
 | 📋 查看日志 | 调试 | 查看控制面板日志 |
 
 **设备操作：**
-- 🔍 检测设备 — 手动检测 OAK-D 连接
+- ☑️ 自动检测 — 每 3 秒自动刷新 OAK-D 连接状态
 - 🔄 重启相机 — 软重启相机进程
 - ⚡ 强制重连 — 停止进程 + 重置 USB
 
@@ -220,6 +232,16 @@ ros2 launch nav24r nav24r_full.launch.py localization:=true use_t1_bridge:=true
 
 # T1 SDK 连通性测试
 python3 scripts/test_t1_sdk.py
+
+# 🧪 Mock 仿真环境（无实机测试 Nav2）
+ros2 launch nav24r simulation/simulation_nav2.launch.py
+# 或使用真实测试地图 + 差分模拟器
+python3 scripts/generate_test_map.py
+ros2 launch nav24r mock_nav.launch.py
+
+# 🧪 T1 桥接转发测试
+ros2 run nav24r t1_bridge
+python3 scripts/mock_trajectory_publisher.py
 ```
 
 ---

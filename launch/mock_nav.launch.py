@@ -93,7 +93,7 @@ def generate_launch_description():
 
     # ---- Nav2 ----
     nav2_params = PathJoinSubstitution(
-        [FindPackageShare('nav24r'), 'config', 'nav2_params.yaml'])
+        [FindPackageShare('nav24r'), 'config', 'nav2_params_mock.yaml'])
 
     nav2_controller = Node(
         package='nav2_controller', executable='controller_server',

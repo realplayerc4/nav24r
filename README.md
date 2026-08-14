@@ -6,7 +6,7 @@
 
 基于 ROS2 Jazzy 的人形机器人自主导航系统，集成 Factor Perception SDK、RTAB-Map SLAM 和 Nav2 导航栈。
 
-**版本**: v2.4.0 | **相机**: OAK-D Pro W (0.85m 安装高度) | **障碍物高度过滤**: 0.2m ~ 1.4m
+**版本**: v2.7.4 | **相机**: OAK-D Pro W (0.85m 安装高度) | **障碍物高度过滤**: 0.2m ~ 1.4m
 
 ---
 
@@ -19,6 +19,7 @@
 - **✅ 自主导航** - Nav2 导航栈，路径规划与避障
 - **✅ 地图管理** - 地图质量分析、Octomap 导出、可视化工具
 - **✅ 系统监控** - 控制面板、设备检测、自动恢复
+- **✅ Mock 仿真** - 无实机 / 无 Gazebo 条件下测试 Nav2 与 T1 桥接
 
 ### 技术亮点
 
@@ -90,16 +91,22 @@ python3 scripts/factor_control_panel.py
 
 | 功能 | 说明 |
 |------|------|
-| 🗺️ 新建建图 | 清空数据库后重新建图（需二次确认） |
+| 🗺️ 新建建图 | 清空数据库后重新建图（受地图保护开关约束） |
 | 🔄 续建 | 加载已有数据库继续建图 |
 | 🧭 开始定位 | 加载已有地图进入定位模式（localization） |
 | 🚀 完整导航 | Factor Perception + RTAB-Map + Nav2 全栈 |
-| 📷 设备状态 | OAK-D 连接/USB速度实时监控 |
-| 📊 地图质量 | 地图质量分析报告 |
-| 🧹 清理地面误判 | 分析并清理地毯等弱纹理地面的误判障碍物 |
-| ✂️ 清理节点 | 交互式浏览和删除 RTAB-Map 数据库中的节点 |
+| 🤖 T1 控制 | T1 机器人模式切换（Prepare/Walking）+ 方向键手动操控 |
+| 📷 设备状态 | OAK-D 连接/USB速度实时监控、重启相机、强制重连 |
+| 🗑️ 重置地图 | 删除默认数据库（受地图保护开关约束） |
 | 🗺️ 导出Octomap | 启动 Database Viewer 导出 |
+| ☁️ 导出点云+RViz | PLY 点云转 ROS2 话题 + RViz 查看 |
+| 🧹 清理地面误判 | 分析并清理地毯等弱纹理地面的误判障碍物（备份后可恢复） |
+| ✂️ 清理节点 | 交互式浏览和删除 RTAB-Map 数据库中的节点 |
+| 📊 RViz / RViz 3D | 2D 顶视角 / 3D 视角 |
+| 📊 地图质量 | 地图质量分析报告 |
 | 📁 数据库 | 打开 rtabmap-databaseViewer |
+| 🧪 测试报告 | 运行测试框架并生成报告 |
+| 📋 查看日志 | 查看控制面板日志 |
 
 > **替代入口（无 GUI 环境）**: `python3 scripts/factor_control_panel.py`（同一入口，跨平台兼容）
 
@@ -156,7 +163,10 @@ nav24r/
 ├── launch/                                 # Launch 文件
 │   ├── nav24r_full.launch.py              # ✅ 完整系统（感知+SLAM+Nav2）
 │   ├── factor_perception_isolated.launch.py # ✅ 隔离架构（推荐）
-│   └── nav2.launch.py                     # 纯 Nav2
+│   ├── nav2.launch.py                     # 纯 Nav2
+│   ├── mock_nav.launch.py                 # 🧪 Mock 导航环境（地图+差分模拟器+Nav2）
+│   └── simulation/                        # 🧪 仿真启动文件
+│       └── simulation_nav2.launch.py      #   模拟感知数据 + Nav2
 │
 ├── scripts/                                # 工具脚本
 │   ├── factor_control_panel.py            # ⭐ 主入口：tkinter 控制面板
@@ -171,9 +181,14 @@ nav24r/
 │   ├── ply_to_pointcloud.py             # PLY点云转ROS2 PointCloud2
 │   ├── mock_odom_publisher.py             # 仿真里程计
 │   ├── mock_pointcloud_publisher.py       # 仿真点云
+│   ├── mock_map_publisher.py              # 空白地图发布器（global_costmap 用）
+│   ├── mock_robot.py                      # 差分驱动模拟器（订阅 cmd_vel → odom+TF）
+│   ├── generate_test_map.py               # 生成测试地图 YAML
 │   ├── t1_bridge.py                       # Nav2 → T1 速度桥接节点
 │   ├── mock_trajectory_publisher.py       # Mock 轨迹测试 (t1_bridge → SDK)
-│   ├── test_nav2_goal.py                 # Nav2 目标导航测试（验证 cmd_vel 输出）
+│   ├── test_nav2_goal.py                  # Nav2 输出观察器（验证 cmd_vel）
+│   ├── test_t1_sdk.py                     # T1 SDK 连通性测试
+│   ├── cancel_nav2_goal.py                # 停止 Nav2 导航（抢占目标，停止按钮调用）
 │   └── test_runner.sh / test_simulation.py # 测试脚本
 │
 ├── docs/                                   # 技术文档
@@ -183,6 +198,8 @@ nav24r/
 │   ├── nav2_rtabmap_knowledge.md          # Nav2/RTAB-Map 知识要点 ⭐
 │   ├── WORK_SUMMARY_20260615.md           # 工作总结
 │   ├── t1_bridge_status.md                # T1 桥接状态文档
+│   ├── booster_t1_sdk.md                  # Booster T1 Python SDK 参考 ⭐
+│   ├── RTABMAP_OPERATIONS_GUIDE.md        # RTAB-Map 操作指南
 │   ├── 因子空间感知SDK标准版使用手册.pdf  # SDK 官方手册
 │   └── ...（控制面板、地图分析、RViz 等使用指南）
 │
@@ -279,21 +296,88 @@ ros2 launch nav24r nav24r_full.launch.py localization:=true use_t1_bridge:=true
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `use_t1_bridge` | `false` | 启用 T1 桥接节点 |
-| `t1_network_interface` | `enx0826ae3beeb8` | T1 SDK 网络接口 (USB LAN) |
+| `t1_network_interface` | `enx207bd2d33010` | T1 SDK 网络接口 (USB LAN) |
 
 **数据流**:
 ```
-Nav2 栈 → /cmd_vel_nav (Twist) → t1_bridge → B1LocoClient.Move(vx, 0, vyaw) → T1 机器人
+Nav2 controller → /cmd_vel → velocity_smoother(激活) → /cmd_vel_smoothed → t1_bridge → B1LocoClient.MoveCommand(vx, vy, vyaw) → T1 机器人
 ```
 
+> **domain 隔离（2026-08-14）**: 电脑侧 ROS2（Nav2/CycloneDDS）统一 `ROS_DOMAIN_ID=42`，与机器人 FastDDS(domain 0) 隔离。避免 DDS 冲突（type hash 刷屏、bt_navigator 启动失败、SDK 连接被干扰导致 damping）。t1_bridge 为纯 Python（不用 rclpy，subprocess `ros2 topic echo` 获取 cmd_vel），不改变机器人模式。
+
+> **SDK 调用约定（2026-08-14 实测）**: 一律用 **fire-and-forget** 接口 —— `MoveCommand()`（移动）和 `SendApiRequestFireAndForget(kChangeMode, '{"mode":N}')`（模式切换）。不要用 `Move()`/`ChangeMode()`/`SendApiRequest()`（同步请求，无 `rpc_service_node` 时会抛 502）。停止指令 fire-and-forget 可能丢包，需连发多次。
+
 **安全机制**:
-- 500ms 无指令自动停车（看门狗）
-- 退出时自动切换 Damping 模式
-- 指令频率限制 ≤20Hz
+- 看门狗：2.0s 无指令自动停车（`watchdog_timeout` 参数可调）
+- 控制面板 T1 停止按钮可**切断 Nav2 规划**（`cancel_nav2_goal.py` 抢占目标）+ 连发停止指令
+- 指令直接转发（Nav2 controller 已限速 ~20Hz），不做额外节流
+- 退出时发送停止指令 `MoveCommand(0,0,0)`
+
+**手动操控（控制面板）**:
+控制面板内置 🤖 T1 控制区，可切换三种模式 **Prepare / Walking / Damping**（Damping 有二次确认弹窗：电机将直接失去电力，站立中的机器人会瘫倒），并用方向键（W/A/S/D/Q/E 按住移动、松手停止）手动操控机器人，无需启动 Nav2。
+
+**链路测试**:
+```bash
+# 1. SDK 连通性测试（独立于 ROS2）
+python3 scripts/test_t1_sdk.py                 # 只测连接 + GetMode
+python3 scripts/test_t1_sdk.py --move-test     # 额外慢走测试
+
+# 2. 桥接转发测试（t1_bridge → SDK）
+ros2 run nav24r t1_bridge
+python3 scripts/mock_trajectory_publisher.py   # 发布预定义轨迹到 /cmd_vel
+```
 
 详见 [docs/t1_bridge_status.md](docs/t1_bridge_status.md)
 
-> **架构说明**: 新代码 (`scripts/t1_bridge.py`) 沿用了旧系统 (`slambAK/`) 验证过的架构设计（Nav2 cmd_vel → SDK Move），改用 Python/ROS2 生态实现，与当前导航栈深度集成。旧版 C++ 系统曾稳定控制机器人运行。
+> **架构说明**: 新代码 (`scripts/t1_bridge.py`) 沿用了旧系统 (`slambAK/`) 验证过的架构设计（Nav2 cmd_vel → SDK MoveCommand），改用 Python/ROS2 生态实现，与当前导航栈深度集成。旧版 C++ 系统曾稳定控制机器人运行。
+
+### 🧪 Mock 仿真环境（无实机测试）
+
+无相机 / 无 Gazebo 条件下验证 Nav2 导航栈和 T1 桥接链路。所有 mock 节点均已注册为 `ros2 run nav24r <节点名>` 可执行入口。
+
+> **参数文件分工**：mock 环境用 `config/nav2_params_mock.yaml`（**RPP 控制器**，轻量可靠，已实测导航成功）；实机用 `config/nav2_params.yaml`（**MPPI DiffDrive** + 9 critic + SmacPlanner2D + velocity_smoother，待实机调参）。
+>
+> **mock 链路已实测通过（2026-08-14）**：Nav2 发目标 → SmacPlanner2D 规划 → RPP 满速前进 → t1_bridge 收到全部 cmd_vel → 目标 SUCCEEDED。
+
+**方案一：simulation_nav2**（模拟感知数据，跑完整 Nav2）
+
+```bash
+ros2 launch nav24r simulation/simulation_nav2.launch.py
+```
+
+启动内容：
+- 静态 TF（map → odom → base_link）
+- `mock_odom_publisher` — 模拟 `/factor_perception/odom`（30Hz 直线运动）
+- `mock_pointcloud_publisher` — 模拟 `/factor_perception/cloud_obstacles`（10Hz 点云）
+- `mock_map_publisher` — 发布 20×20m 空白 OccupancyGrid 到 `/factor_perception/map`（TRANSIENT_LOCAL，供 global_costmap static_layer）
+- Nav2 全栈（controller 输出 `/cmd_vel`）
+
+**方案二：mock_nav**（真实测试地图 + 差分驱动模拟器）
+
+```bash
+# 1. 先生成测试地图
+python3 scripts/generate_test_map.py            # → ~/rtabmap_maps/test_map.yaml
+
+# 2. 启动 mock 环境
+ros2 launch nav24r mock_nav.launch.py
+ros2 launch nav24r mock_nav.launch.py start_x:=1.0 start_y:=2.0 start_yaw:=0.0
+```
+
+启动内容：
+- `nav2_map_server` 加载测试地图（remap 到 `/factor_perception/map`）
+- `mock_robot` — 差分驱动模拟器，订阅 `/cmd_vel_nav`，发布 odom + TF
+- Nav2 全栈（controller 输出 remap 为 `/cmd_vel_nav`）
+
+**验证输出**（配合 RViz 发送 Nav2 Goal，监听速度输出合理性）：
+
+```bash
+# 观察 /cmd_vel 输出（simulation_nav2 / 实机模式下 Nav2 直接输出 /cmd_vel）
+python3 scripts/test_nav2_goal.py
+```
+
+> 相关 mock 节点：`mock_odom_publisher`、`mock_pointcloud_publisher`、`mock_map_publisher`、`mock_robot`、`generate_test_map`、`mock_trajectory_publisher`（T1 桥接测试用）。`test_nav2_goal.py` 订阅 `/cmd_vel`，在 `simulation_nav2` 和实机模式下可用。
+
+---
 
 ### 地图保护
 
@@ -314,13 +398,18 @@ Nav2 栈 → /cmd_vel_nav (Twist) → t1_bridge → B1LocoClient.Move(vx, 0, vya
 
 ### Nav2 参数
 
-关键配置（`config/nav2_params.yaml`）：
+关键配置（`config/nav2_params.yaml`），针对**人形机器人特点**调优：
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
+| `motion_model` | `DiffDrive` | 人形无横移，仅 vx/vyaw（与 T1 MoveCommand 一致） |
+| 全局规划器 | `SmacPlannerHybrid` | Hybrid A*，生成人形可跟随的平滑弧线路径 |
+| `PathFollowCritic` 等 | 9 个 critic | 补全 PathFollow/PreferForward/Constraint 等，保证沿路径前进 |
 | `max_obstacle_height` | 1.4m | 高于 1.4m 不视为障碍物（相机有效范围） |
 | `min_obstacle_height` | 0.2m | 低于 0.2m 不视为障碍物（地面/门槛） |
-| `robot_radius` | 0.5m | 机器人半径 |
+| `wz_max` | 0.4 rad/s | 双足转向受限 |
+| `inflation_radius` | 0.7m | 人形需更大障碍余量 |
+| `velocity_smoother` | 启用 | controller → /cmd_vel → smoother → /cmd_vel_smoothed，缓加减速防前倾 |
 
 ---
 
@@ -392,6 +481,8 @@ Nav2 栈 → /cmd_vel_nav (Twist) → t1_bridge → B1LocoClient.Move(vx, 0, vya
 - [RTAB-Map 配置文档](config/rtabmap_config_doc.md) - 参数配置与优化
 - [Nav2 集成方案](docs/nav2_integration_plan.md) - 导航系统集成指南
 - [Nav2/RTAB-Map 知识要点](docs/nav2_rtabmap_knowledge.md) - Nav2 与 RTAB-Map 核心知识速查 ⭐
+- [Booster T1 SDK 参考](docs/booster_t1_sdk.md) - T1 双足机器人 Python SDK API 速查 ⭐
+- [T1 桥接状态](docs/t1_bridge_status.md) - Nav2 → T1 桥接设计与验证记录
 - [工作总结](docs/WORK_SUMMARY_20260615.md) - 开发过程详细记录
 
 ### 使用指南
@@ -423,15 +514,51 @@ Nav2 栈 → /cmd_vel_nav (Twist) → t1_bridge → B1LocoClient.Move(vx, 0, vya
 
 ## 📝 版本历史
 
+## [v2.7.0] - 2026-08-14 - Nav2 人形机器人导航适配
+
+- ✅ MPPI 运动模型 Omni → **DiffDrive**（人形无横移）
+- ✅ 补全 MPPI critic（PathFollow/PreferForward/Constraint/GoalAngle/PathAngle）
+- ✅ 全局规划器 NavFn → **SmacPlannerHybrid**（Hybrid A* 平滑弧线）
+- ✅ 启用 velocity_smoother（缓加减速防前倾）
+- ✅ 调参：wz_max 0.4、inflation 0.7、prune_distance 1.5
+
+## [v2.6.0] - 2026-08-14 - 控制面板 T1 实测修复
+
+- ✅ 模式改为"开关"模型（移除 leg_tau 推断）
+- ✅ fire-and-forget 模式切换（无 502）、停止连发、A/D 方向修正
+
+## [v2.5.0] - 2026-08-13 - Python SDK 验证 + LAN 直连
+
+### 🆕 新功能
+- ✅ `scripts/test_t1_sdk.py`：T1 SDK 最小连通性测试脚本
+- ✅ Python SDK 核心功能全部验证通过：
+  - 模式切换 (Damping → Prepare → Walking)
+  - 运动控制 (Move / SendApiRequest)
+  - 状态读取 (B1LowStateSubscriber 23电机 + IMU ~500Hz)
+  - 里程计订阅 (B1OdometerStateSubscriber ~600Hz)
+- ✅ 控制面板 T1 方向键映射修正（W/S=前后, A/D=左右, Q/E=转向）
+- ✅ 模式检测改用 subscriber 推断（B1LowStateSubscriber 电机扭矩），不再依赖 GetMode RPC
+- ✅ `t1_bridge.py` 添加 B1LowStateSubscriber 用于 Walking 模式检测
+
+### 🔧 改动
+- ✅ 网络接口统一为 LAN 直连 `enx207bd2d33010`（废弃 WiFi 跳板）
+- ✅ A/D 键 vy 符号修正：A=左(vy负), D=右(vy正)，与机器人实际移动方向一致
+
+### 📋 机器人信息
+- 固件: v1.1.0.0-release | SDK: booster_robotics_sdk_python==1.5.6 | SSH: booster@192.168.10.102 (LAN)
+
+---
+
 ## [v2.4.0] - 2026-08-10 - T1 双足机器人桥接
 
 ### 🆕 新功能
 - ✅ `scripts/t1_bridge.py`：Nav2 → T1 SDK 速度桥接节点
-  - 订阅 `/cmd_vel_nav`，调用 `B1LocoClient.Move(vx, 0.0, vyaw)`
-  - 500ms 看门狗自动停车，`_is_stopping` 标志位防重复触发
-  - 指令节流 ≤20Hz，速度变化 >0.05 时立即转发
+  - 订阅 `/cmd_vel`，调用 `B1LocoClient.MoveCommand(vx, vy, vyaw)`
+  - 看门狗 `watchdog_timeout=2.0s` 无指令自动停车
+  - 指令直接转发（Nav2 controller 已限速 ~20Hz），不做额外节流
+  - 模式保护：仅 kWalking 模式转发（B1LowStateSubscriber 扭矩推断）
   - SDK 连接超时优雅关闭（`raise RuntimeError` → `finally`）
-  - 退出时自动切换 Damping 模式
+  - 退出时发送停止指令 `MoveCommand(0,0,0)`
 - ✅ `launch/nav24r_full.launch.py`：新增 `use_t1_bridge` / `t1_network_interface` 参数
 - ✅ `setup.py`：注册 `t1_bridge` console_scripts 入口
 - ✅ `docs/t1_bridge_status.md`：T1 Bridge 设计文档与旧代码对比
