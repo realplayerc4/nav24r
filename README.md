@@ -477,6 +477,7 @@ python3 scripts/test_nav2_goal.py
 
 ### 核心文档
 
+- [📖 使用手册](docs/HANDBOOK.md) - 完整使用指南（含名词解释 + Wiki）⭐
 - [ROS2 工程分析报告](docs/ros2_engineering_analysis.md) - 系统架构问题与解决方案
 - [RTAB-Map 配置文档](config/rtabmap_config_doc.md) - 参数配置与优化
 - [Nav2 集成方案](docs/nav2_integration_plan.md) - 导航系统集成指南
