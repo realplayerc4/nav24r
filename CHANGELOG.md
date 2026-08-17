@@ -1,5 +1,25 @@
 # 变更日志
 
+## [v2.8.0] - 2026-08-15 - 真机完整导航验证 + RTAB-Map 定位漂移诊断
+
+### 🎯 真机完整导航验证（成功）
+- ✅ **完整导航链路走通**：Nav2 Goal → 路径(97点) → RPP 满速 0.2m/s → velocity_smoother → t1_bridge → MoveCommand → 机器人行走 **7.24m 到达目标**
+- ✅ 无 damping、无原地踏步（干净环境 + 单 t1_bridge）
+- ✅ 手动 MoveCommand 走 0.2m 正常（SDK 步态控制验证通过）
+
+### 🔍 重要诊断：RTAB-Map 定位漂移（vx=0 根因）
+- ⚠️ **`NaN found in local descriptor map`**（RTAB-Map 视觉定位产生 NaN）
+- ⚠️ odom 静止时 ±0.1m 抖动，位移累计假数据（数十米但实际位置不变）
+- ⚠️ Nav2 基于漂移 odom → RPP 输出 vx=0 → 机器人不走 → 进度检查失败循环
+- ⚠️ 控制环速率仅 5-14Hz（应 20Hz）
+- 📌 **结论**：vx=0 非 Nav2 配置问题，是 RTAB-Map 定位漂移所致。手动控制（不依赖 odom）正常
+
+### 🔧 环境/运维
+- ⚠️ 多次点"完整导航"会累积多个 t1_bridge 进程（多客户端连 SDK 导致 damping/异常）——**每次启动前先"⏹️ 停止"清理**
+- ✅ 推送 GitHub 需走 Clash 代理（`-c http.proxy=http://127.0.0.1:7897`，DNS 被 fake-ip 污染）
+
+---
+
 ## [v2.7.4] - 2026-08-14 - domain 隔离 + velocity_smoother 激活修复 + 真机走步验证
 
 ### 🔧 真机走步验证通过
